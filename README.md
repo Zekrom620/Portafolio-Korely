@@ -1,2 +1,2 @@
-# Portafolio-CiPress
-Este repositorio se usara para almacenar toda la informacion del portafolio de Cipress
+# Portafolio-Korely
+Este repositorio se usara para almacenar toda la informacion del portafolio de Korely
