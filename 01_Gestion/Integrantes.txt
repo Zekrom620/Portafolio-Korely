@@ -1,0 +1,7 @@
+Proyecto Korely - TPY1101
+
+Sergio Aranguiz - Jefe de Proyecto / Backend
+
+Vicente Farias - Arquitecto de Software / Base de Datos
+
+Sergio Aránguiz / Vicente Farias - QA / Frontend
