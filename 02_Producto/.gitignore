@@ -1,0 +1,11 @@
+# Base de datos local de Docker
+postgres_data/
+
+# Entornos virtuales de Python
+venv/
+__pycache__/
+.env
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
