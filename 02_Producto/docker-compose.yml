@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   db:
@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: korely_password
       POSTGRES_DB: korely_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
