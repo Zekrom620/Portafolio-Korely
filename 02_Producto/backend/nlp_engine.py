@@ -1,36 +1,54 @@
-import spacy
+import os
+import json
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-try:
-    nlp = spacy.load("es_core_news_md")
-    print("✅ IA de spaCy cargada correctamente.")
-except Exception as e:
-    print(f"❌ Error al cargar spaCy: {e}")
+# 1. Cargamos tu API Key de forma 100% segura desde el .env
+load_dotenv()
+api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    print("❌ ERROR CRÍTICO: Python no está encontrando el archivo .env o la variable GEMINI_API_KEY")
+else:
+    genai.configure(api_key=api_key)
+    print("✅ Credenciales de Gemini cargadas de forma segura.")
 
 def procesar_cv(texto_cv: str):
     """
-    Toma el texto de un CV y extrae entidades agrupándolas en categorías limpias.
+    Toma el texto bruto de un CV y usa la versión más reciente de Gemini para estructurarlo.
     """
-    doc = nlp(texto_cv)
-    
-    # Creamos un diccionario limpio para organizar la información
-    datos_extraidos = {
-        "Personas": [],
-        "Organizaciones": [],
-        "Lugares": []
-    }
-    
-    # Clasificamos las entidades en sus listas correspondientes
-    for entidad in doc.ents:
-        if entidad.label_ == "PER":
-            datos_extraidos["Personas"].append(entidad.text)
-        elif entidad.label_ == "ORG":
-            datos_extraidos["Organizaciones"].append(entidad.text)
-        elif entidad.label_ == "LOC":
-            datos_extraidos["Lugares"].append(entidad.text)
+    try:
+        # AQUÍ ESTÁ LA CORRECCIÓN: Usamos el modelo moderno que pide la documentación.
+        # Puedes probar con 'gemini-1.5-flash' o el que encontraste en la doc: 'gemini-3-flash-preview'
+        model = genai.GenerativeModel('gemini-3-flash-preview')
+        
+        prompt = f"""
+        Eres Korely, un Headhunter Autónomo experto. 
+        Lee el siguiente texto extraído de un currículum y extrae la información clave.
+        Devuelve ÚNICAMENTE un objeto JSON válido con la siguiente estructura, sin texto adicional:
+        {{
+            "nombre_candidato": "Nombre encontrado o 'No especificado'",
+            "habilidades_tecnicas": ["habilidad 1", "habilidad 2"],
+            "empresas_previas": ["Empresa 1", "Empresa 2"]
+        }}
+
+        Texto del CV:
+        {texto_cv}
+        """
+        
+        respuesta = model.generate_content(prompt)
+        texto_respuesta = respuesta.text
+        
+        # Limpieza por si Gemini responde con formato Markdown
+        if "```json" in texto_respuesta:
+            texto_respuesta = texto_respuesta.replace("```json", "").replace("```", "").strip()
+        elif "```" in texto_respuesta:
+            texto_respuesta = texto_respuesta.replace("```", "").strip()
             
-    # Opcional: Eliminamos duplicados por si la IA detecta la misma palabra dos veces
-    datos_extraidos["Personas"] = list(set(datos_extraidos["Personas"]))
-    datos_extraidos["Organizaciones"] = list(set(datos_extraidos["Organizaciones"]))
-    datos_extraidos["Lugares"] = list(set(datos_extraidos["Lugares"]))
-            
-    return datos_extraidos
+        datos_json = json.loads(texto_respuesta)
+        return datos_json
+        
+    except Exception as e:
+        error_real = f"ERROR EXACTO DE GOOGLE: {type(e).__name__} - {str(e)}"
+        print(f"❌ {error_real}")
+        return {"error": error_real}
