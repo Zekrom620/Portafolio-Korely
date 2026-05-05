@@ -24,4 +24,16 @@ class Vacante(Base):
     fecha_creacion = Column(TIMESTAMP, server_default=func.now())
     id_gerente_creador = Column(Integer, ForeignKey("usuarios.id_usuario"))
 
-# Más adelante agregaremos Candidatos, Entrevistas y Resultados
+class Candidato(Base):
+    __tablename__ = "candidatos"
+    
+    id_candidato = Column(Integer, primary_key=True, index=True)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario")) # El usuario que se registró
+    nombre_completo = Column(String(150))
+    telefono = Column(String(20))
+    cv_texto = Column(Text) # Aquí guardaremos todo el texto bruto del PDF
+    
+    # Nota: Comentado el vector por ahora hasta que se configure la búsqueda semántica
+    # cv_vector = Column(Vector(768)) 
+    
+    fecha_postulacion = Column(TIMESTAMP, server_default=func.now())

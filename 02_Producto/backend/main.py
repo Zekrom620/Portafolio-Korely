@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional
@@ -9,6 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # Importamos configuración, motor y modelos
 from database import get_db, engine
 import models
+
+import nlp_engine 
+import pdf_handler
 
 # 1. Crear tablas automáticamente si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -41,6 +44,23 @@ class VacanteResponse(BaseModel):
     titulo: Optional[str]
     descripcion: Optional[str]
     estado: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+# --- ESQUEMAS DE CANDIDATOS ---
+class CandidatoCreate(BaseModel):
+    id_usuario: int
+    nombre_completo: str
+    telefono: str
+    cv_texto: str
+
+class CandidatoResponse(BaseModel):
+    id_candidato: int
+    id_usuario: int
+    nombre_completo: str
+    telefono: str
+    cv_texto: str
 
     class Config:
         from_attributes = True
@@ -114,3 +134,72 @@ def eliminar_vacante(id_vacante: int, db: Session = Depends(get_db)):
     db.delete(vacante)
     db.commit()
     return {"status": "ok", "mensaje": "Vacante eliminada exitosamente"}
+
+# --- MÓDULO II: INGESTA Y PARSING (IA) ---
+
+@app.post("/candidatos")
+def procesar_nuevo_candidato(candidato: CandidatoCreate, db: Session = Depends(get_db)):
+    """
+    Recibe los datos de un candidato, guarda su CV en la base de datos 
+    y utiliza IA (spaCy) para extraer entidades clave del texto.
+    """
+    # 1. Guardamos al candidato en PostgreSQL
+    nuevo_candidato = models.Candidato(
+        id_usuario=candidato.id_usuario,
+        nombre_completo=candidato.nombre_completo,
+        telefono=candidato.telefono,
+        cv_texto=candidato.cv_texto
+    )
+    db.add(nuevo_candidato)
+    db.commit()
+    db.refresh(nuevo_candidato)
+    
+    # 2. Despertamos a la IA para que lea el currículum
+    datos_extraidos_ia = nlp_engine.procesar_cv(candidato.cv_texto)
+    
+    # 3. Devolvemos la confirmación y el análisis al frontend
+    return {
+        "mensaje": "Candidato guardado y analizado exitosamente",
+        "id_candidato": nuevo_candidato.id_candidato,
+        "analisis_spacy": datos_extraidos_ia
+    }
+
+@app.post("/candidatos/upload-cv")
+async def subir_cv_candidato(
+    id_usuario: int = Form(...), 
+    nombre_completo: str = Form(...), 
+    telefono: str = Form(...), 
+    archivo_cv: UploadFile = File(...), 
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint final: Sube un PDF, extrae el texto, lo guarda en BD y lo analiza con IA.
+    """
+    # 1. Validar que sea un PDF
+    if not archivo_cv.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser formato .pdf")
+    
+    # 2. Extraer el texto del PDF
+    contenido = await archivo_cv.read()
+    texto_extraido = pdf_handler.extraer_texto_pdf(contenido)
+    
+    # 3. Guardar en la Base de Datos
+    nuevo_candidato = models.Candidato(
+        id_usuario=id_usuario,
+        nombre_completo=nombre_completo,
+        telefono=telefono,
+        cv_texto=texto_extraido
+    )
+    db.add(nuevo_candidato)
+    db.commit()
+    db.refresh(nuevo_candidato)
+    
+    # 4. Procesar el texto extraído con spaCy (IA)
+    analisis_ia = nlp_engine.procesar_cv(texto_extraido)
+    
+    return {
+        "mensaje": "CV procesado exitosamente",
+        "candidato": nombre_completo,
+        "texto_preview": texto_extraido[:200] + "...", # Muestra los primeros 200 caracteres para comprobar
+        "analisis_spacy": analisis_ia
+    }
