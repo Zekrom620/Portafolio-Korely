@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, TIMESTAMP
 from sqlalchemy.sql import func
 from database import Base
+from sqlalchemy.dialects.postgresql import JSONB
 
 class Rol(Base):
     __tablename__ = "roles"
@@ -32,7 +33,7 @@ class Candidato(Base):
     nombre_completo = Column(String(150))
     telefono = Column(String(20))
     cv_texto = Column(Text) # Aquí guardaremos todo el texto bruto del PDF
-    
+    cv_estructurado = Column(JSONB)
     # Nota: Comentado el vector por ahora hasta que se configure la búsqueda semántica
     # cv_vector = Column(Vector(768)) 
     

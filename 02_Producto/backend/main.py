@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -61,9 +61,15 @@ class CandidatoResponse(BaseModel):
     nombre_completo: str
     telefono: str
     cv_texto: str
+    cv_estructurado: Optional[Any] = None
 
     class Config:
         from_attributes = True
+
+# --- ESQUEMAS DE LOGIN ---
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 # --- 4. RUTAS (Endpoints) ---
 @app.get("/")
@@ -175,6 +181,11 @@ async def subir_cv_candidato(
     """
     Endpoint final: Sube un PDF, extrae el texto, lo guarda en BD y lo analiza con IA.
     """
+    # Validar que el usuario exista
+    usuario_db = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario).first()
+    if not usuario_db:
+        raise HTTPException(status_code=404, detail="El usuario especificado no existe")
+    
     # 1. Validar que sea un PDF
     if not archivo_cv.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="El archivo debe ser formato .pdf")
@@ -183,23 +194,148 @@ async def subir_cv_candidato(
     contenido = await archivo_cv.read()
     texto_extraido = pdf_handler.extraer_texto_pdf(contenido)
     
-    # 3. Guardar en la Base de Datos
+    if len(texto_extraido.strip()) < 50:
+        raise HTTPException(
+            status_code=400, 
+            detail="El PDF parece estar vacío o ser una imagen escaneada. Por favor sube un PDF con texto seleccionable."
+        )
+    
+    # 3. Procesar el texto extraído con Gemini (IA)
+    analisis_ia = nlp_engine.procesar_cv(texto_extraido)
+    
+    # 4. Guardar en la Base de Datos
     nuevo_candidato = models.Candidato(
         id_usuario=id_usuario,
         nombre_completo=nombre_completo,
         telefono=telefono,
-        cv_texto=texto_extraido
+        cv_texto=texto_extraido,
+        cv_estructurado=analisis_ia
     )
     db.add(nuevo_candidato)
     db.commit()
     db.refresh(nuevo_candidato)
     
-    # 4. Procesar el texto extraído con spaCy (IA)
-    analisis_ia = nlp_engine.procesar_cv(texto_extraido)
+    
     
     return {
         "mensaje": "CV procesado exitosamente",
         "candidato": nombre_completo,
         "texto_preview": texto_extraido[:200] + "...", # Muestra los primeros 200 caracteres para comprobar
         "analisis_spacy": analisis_ia
+    }
+
+
+@app.get("/candidatos", response_model=List[CandidatoResponse])
+def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
+    """
+    Obtiene la lista completa de todos los candidatos registrados en la base de datos.
+    Ideal para que el Frontend construya una tabla o lista visual.
+    """
+    candidatos = db.query(models.Candidato).all()
+    return candidatos
+
+@app.get("/candidatos/{id_candidato}", response_model=CandidatoResponse)
+def obtener_candidato_por_id(id_candidato: int, db: Session = Depends(get_db)):
+    """
+    Obtiene los detalles de un candidato específico por su ID.
+    Ideal para la vista de 'Perfil del Candidato'.
+    """
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
+    if not candidato:
+        raise HTTPException(status_code=404, detail="Candidato no encontrado")
+    return candidato
+
+@app.put("/candidatos/{id_candidato}")
+async def actualizar_candidato(
+    id_candidato: int,
+    nombre_completo: Optional[str] = Form(None),
+    telefono: Optional[str] = Form(None),
+    archivo_cv: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Actualiza los datos de un candidato. 
+    Si se envía un nuevo PDF, se procesa nuevamente con Gemini y se actualiza el texto.
+    """
+    # 1. Buscamos al candidato
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
+    if not candidato:
+        raise HTTPException(status_code=404, detail="Candidato no encontrado")
+
+    # 2. Actualizamos solo los datos que el usuario haya enviado
+    if nombre_completo:
+        candidato.nombre_completo = nombre_completo
+    if telefono:
+        candidato.telefono = telefono
+
+    analisis_ia = None
+    
+    # 3. Si mandó un nuevo CV, extraemos el texto y despertamos a Gemini
+    if archivo_cv:
+        if not archivo_cv.filename.endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="El archivo debe ser formato .pdf")
+        
+        contenido = await archivo_cv.read()
+        texto_extraido = pdf_handler.extraer_texto_pdf(contenido)
+        candidato.cv_texto = texto_extraido # Actualizamos el texto en la BD
+        
+        # Procesamos con IA
+        analisis_ia = nlp_engine.procesar_cv(texto_extraido)
+
+        cv_estructurado=analisis_ia
+
+    # 4. Guardamos los cambios
+    db.commit()
+    db.refresh(candidato)
+
+    respuesta = {
+        "mensaje": "Candidato actualizado exitosamente",
+        "candidato_id": candidato.id_candidato
+    }
+    
+    if analisis_ia:
+        respuesta["nuevo_analisis_ia"] = analisis_ia
+        
+    return respuesta
+
+
+@app.delete("/candidatos/{id_candidato}")
+def eliminar_candidato(id_candidato: int, db: Session = Depends(get_db)):
+    """
+    Elimina un candidato de la base de datos por su ID.
+    """
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
+    if not candidato:
+        raise HTTPException(status_code=404, detail="Candidato no encontrado")
+        
+    db.delete(candidato)
+    db.commit()
+    
+    return {"mensaje": f"Candidato con ID {id_candidato} eliminado exitosamente"}
+
+
+# --- MÓDULO DE AUTENTICACIÓN (CU1) ---
+
+@app.post("/login")
+def iniciar_sesion(credenciales: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Endpoint para validar credenciales de un usuario basado en los modelos reales.
+    """
+    # 1. Buscamos al usuario en la base de datos por su email (exactamente como está en tu BD)
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == credenciales.email).first()
+    
+    # 2. Verificamos si existe y si la contraseña coincide 
+    # (Comparamos con 'password_hash' que es como lo definiste en tu modelo)
+    if not usuario or usuario.password_hash != credenciales.password:
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
+    
+    # 3. Si todo está correcto, enviamos los datos usando 'nombre' en vez de 'nombre_completo'
+    return {
+        "mensaje": "Login exitoso",
+        "token_acceso": f"token-simulado-usuario-{usuario.id_usuario}",
+        "usuario": {
+            "id_usuario": usuario.id_usuario,
+            "nombre": usuario.nombre,
+            "id_rol": usuario.id_rol 
+        }
     }
