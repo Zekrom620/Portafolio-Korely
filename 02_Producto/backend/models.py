@@ -38,3 +38,12 @@ class Candidato(Base):
     # cv_vector = Column(Vector(768)) 
     
     fecha_postulacion = Column(TIMESTAMP, server_default=func.now())
+
+class Postulacion(Base):
+    __tablename__ = "postulaciones"
+    
+    id_postulacion = Column(Integer, primary_key=True, index=True)
+    id_candidato = Column(Integer, ForeignKey("candidatos.id_candidato"))
+    id_vacante = Column(Integer, ForeignKey("vacantes.id_vacante"))
+    estado = Column(String(50), default="Postulado") # Puede ser: Postulado, En Revisión, Entrevistado...
+    fecha_postulacion = Column(TIMESTAMP, server_default=func.now())

@@ -78,6 +78,10 @@ class RegistroRequest(BaseModel):
     password: str
     # No pedimos el id_rol porque lo asignaremos internamente por seguridad
 
+# --- ESQUEMA DE POSTULACION ---
+class PostulacionCreate(BaseModel):
+    id_vacante: int
+
 # --- 4. RUTAS (Endpoints) ---
 @app.get("/")
 def ruta_raiz():
@@ -415,4 +419,55 @@ def registrar_usuario(datos: RegistroRequest, db: Session = Depends(get_db)):
             "nombre": nuevo_usuario.nombre,
             "email": nuevo_usuario.email
         }
+    }
+
+@app.post("/postulaciones")
+def postular_a_vacante(
+    datos: PostulacionCreate,
+    db: Session = Depends(get_db),
+    # Usamos el Guardia normal (cualquier usuario logueado entra, pero validaremos su rol dentro)
+    id_usuario_real: int = Depends(security.obtener_usuario_actual)
+):
+    """
+    Permite a un candidato postularse a una vacante específica.
+    Usa el Token para identificar quién se está postulando.
+    """
+    # 1. Buscamos al candidato asociado a este usuario
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_usuario == id_usuario_real).first()
+    
+    # Si el usuario hizo login pero no ha subido su CV, no puede postularse
+    if not candidato:
+        raise HTTPException(
+            status_code=400, 
+            detail="Debes completar tu perfil de candidato (subir tu CV) antes de postularte a una vacante."
+        )
+
+    # 2. Verificamos que la vacante realmente exista
+    vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == datos.id_vacante).first()
+    if not vacante:
+        raise HTTPException(status_code=404, detail="La vacante a la que intentas postular no existe.")
+
+    # 3. Verificamos que no se haya postulado ya a esta misma vacante (evitar duplicados)
+    postulacion_previa = db.query(models.Postulacion).filter(
+        models.Postulacion.id_candidato == candidato.id_candidato,
+        models.Postulacion.id_vacante == datos.id_vacante
+    ).first()
+    
+    if postulacion_previa:
+        raise HTTPException(status_code=400, detail="Ya te has postulado a esta vacante anteriormente.")
+
+    # 4. Creamos la postulación
+    nueva_postulacion = models.Postulacion(
+        id_candidato=candidato.id_candidato,
+        id_vacante=datos.id_vacante,
+        # Aquí puedes agregar un estado por defecto si tienes esa columna, ej: estado="En Revisión"
+    )
+    
+    db.add(nueva_postulacion)
+    db.commit()
+    
+    return {
+        "mensaje": "Postulación realizada con éxito",
+        "vacante": vacante.titulo, # Asumiendo que tu modelo Vacante tiene un campo 'titulo'
+        "candidato": candidato.nombre_completo
     }

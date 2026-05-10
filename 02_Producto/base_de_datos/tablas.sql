@@ -57,3 +57,12 @@ CREATE TABLE resultados_matching (
     score_afinidad DECIMAL(5,4), -- Similitud de coseno (vector vs vector)
     ranking_posicion INT -- Lugar en el que quedó tras el proceso
 );
+
+
+CREATE TABLE postulaciones (
+    id_postulacion SERIAL PRIMARY KEY,
+    id_candidato INTEGER REFERENCES candidatos(id_candidato) ON DELETE CASCADE,
+    id_vacante INTEGER REFERENCES vacantes(id_vacante) ON DELETE CASCADE,
+    estado VARCHAR(50) DEFAULT 'Postulado',
+    fecha_postulacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
