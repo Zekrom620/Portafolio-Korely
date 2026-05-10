@@ -4,6 +4,7 @@ from sqlalchemy import text
 from typing import List, Optional, Any
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import security
 
 
 # Importamos configuración, motor y modelos
@@ -71,6 +72,12 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
+class RegistroRequest(BaseModel):
+    nombre: str
+    email: str
+    password: str
+    # No pedimos el id_rol porque lo asignaremos internamente por seguridad
+
 # --- 4. RUTAS (Endpoints) ---
 @app.get("/")
 def ruta_raiz():
@@ -93,7 +100,7 @@ def obtener_vacantes(db: Session = Depends(get_db)):
     return vacantes
 
 @app.post("/vacantes", response_model=VacanteResponse)
-def crear_vacante(vacante: VacanteCreate, db: Session = Depends(get_db)):
+def crear_vacante(vacante: VacanteCreate, db: Session = Depends(get_db),id_gerente: int = Depends(security.obtener_usuario_gerente)):
     """Crea una nueva vacante."""
     nueva_vacante = models.Vacante(
         titulo=vacante.titulo, 
@@ -115,7 +122,7 @@ def obtener_vacante(id_vacante: int, db: Session = Depends(get_db)):
     return vacante
 
 @app.put("/vacantes/{id_vacante}", response_model=VacanteResponse)
-def actualizar_vacante(id_vacante: int, vacante_actualizada: VacanteCreate, db: Session = Depends(get_db)):
+def actualizar_vacante(id_vacante: int, vacante_actualizada: VacanteCreate, db: Session = Depends(get_db), id_gerente: int = Depends(security.obtener_usuario_gerente)):
     """Actualiza los datos de una vacante existente."""
     vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
     if not vacante:
@@ -131,7 +138,7 @@ def actualizar_vacante(id_vacante: int, vacante_actualizada: VacanteCreate, db: 
     return vacante
 
 @app.delete("/vacantes/{id_vacante}")
-def eliminar_vacante(id_vacante: int, db: Session = Depends(get_db)):
+def eliminar_vacante(id_vacante: int, db: Session = Depends(get_db), id_gerente: int = Depends(security.obtener_usuario_gerente)):
     """Elimina una vacante de la base de datos."""
     vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
     if not vacante:
@@ -172,19 +179,20 @@ def procesar_nuevo_candidato(candidato: CandidatoCreate, db: Session = Depends(g
 
 @app.post("/candidatos/upload-cv")
 async def subir_cv_candidato(
-    id_usuario: int = Form(...), 
+    id_usuario: int = Depends(security.obtener_usuario_actual), 
+    
     nombre_completo: str = Form(...), 
     telefono: str = Form(...), 
     archivo_cv: UploadFile = File(...), 
     db: Session = Depends(get_db)
 ):
     """
-    Endpoint final: Sube un PDF, extrae el texto, lo guarda en BD y lo analiza con IA.
+    Endpoint Seguro y Final: Sube un PDF, extrae el texto, lo guarda en BD y lo analiza con IA.
     """
-    # Validar que el usuario exista
+    # 0. Validar que el usuario exista en la BD (Por si fue eliminado recientemente)
     usuario_db = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario).first()
     if not usuario_db:
-        raise HTTPException(status_code=404, detail="El usuario especificado no existe")
+        raise HTTPException(status_code=404, detail="El usuario especificado no existe o fue eliminado")
     
     # 1. Validar que sea un PDF
     if not archivo_cv.filename.endswith('.pdf'):
@@ -205,7 +213,7 @@ async def subir_cv_candidato(
     
     # 4. Guardar en la Base de Datos
     nuevo_candidato = models.Candidato(
-        id_usuario=id_usuario,
+        id_usuario=id_usuario, # Usa el ID seguro verificado
         nombre_completo=nombre_completo,
         telefono=telefono,
         cv_texto=texto_extraido,
@@ -215,12 +223,11 @@ async def subir_cv_candidato(
     db.commit()
     db.refresh(nuevo_candidato)
     
-    
-    
+    # Mantengo intacto tu formato de respuesta original
     return {
         "mensaje": "CV procesado exitosamente",
         "candidato": nombre_completo,
-        "texto_preview": texto_extraido[:200] + "...", # Muestra los primeros 200 caracteres para comprobar
+        "texto_preview": texto_extraido[:200] + "...", 
         "analisis_spacy": analisis_ia
     }
 
@@ -251,16 +258,25 @@ async def actualizar_candidato(
     nombre_completo: Optional[str] = Form(None),
     telefono: Optional[str] = Form(None),
     archivo_cv: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # --- CAPA DE SEGURIDAD ---
+    id_usuario_token: int = Depends(security.obtener_usuario_actual)
 ):
     """
     Actualiza los datos de un candidato. 
-    Si se envía un nuevo PDF, se procesa nuevamente con Gemini y se actualiza el texto.
+    Protegido: Solo el dueño del perfil puede modificarlo.
     """
-    # 1. Buscamos al candidato
+    # 1. Buscamos al candidato en la BD
     candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
     if not candidato:
         raise HTTPException(status_code=404, detail="Candidato no encontrado")
+
+    # --- 🚨 EL ESCUDO: Validación de Propiedad ---
+    if candidato.id_usuario != id_usuario_token:
+        raise HTTPException(
+            status_code=403, 
+            detail="Acceso denegado. No tienes permiso para editar este perfil."
+        )
 
     # 2. Actualizamos solo los datos que el usuario haya enviado
     if nombre_completo:
@@ -270,26 +286,26 @@ async def actualizar_candidato(
 
     analisis_ia = None
     
-    # 3. Si mandó un nuevo CV, extraemos el texto y despertamos a Gemini
+    # 3. Si mandó un nuevo CV, procesamos con Gemini
     if archivo_cv:
         if not archivo_cv.filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="El archivo debe ser formato .pdf")
         
         contenido = await archivo_cv.read()
         texto_extraido = pdf_handler.extraer_texto_pdf(contenido)
-        candidato.cv_texto = texto_extraido # Actualizamos el texto en la BD
+        candidato.cv_texto = texto_extraido 
         
-        # Procesamos con IA
+        # Obtenemos el nuevo análisis de la IA
         analisis_ia = nlp_engine.procesar_cv(texto_extraido)
-
-        cv_estructurado=analisis_ia
+        # IMPORTANTE: Guardamos el análisis en la columna estructurada
+        candidato.cv_estructurado = analisis_ia
 
     # 4. Guardamos los cambios
     db.commit()
     db.refresh(candidato)
 
     respuesta = {
-        "mensaje": "Candidato actualizado exitosamente",
+        "mensaje": "Candidato actualizado exitosamente de forma segura",
         "candidato_id": candidato.id_candidato
     }
     
@@ -298,44 +314,105 @@ async def actualizar_candidato(
         
     return respuesta
 
-
 @app.delete("/candidatos/{id_candidato}")
-def eliminar_candidato(id_candidato: int, db: Session = Depends(get_db)):
+def eliminar_candidato(
+    id_candidato: int, 
+    db: Session = Depends(get_db),
+    # --- CAPA DE SEGURIDAD ---
+    id_usuario_token: int = Depends(security.obtener_usuario_actual)
+):
     """
-    Elimina un candidato de la base de datos por su ID.
+    Elimina un candidato de la base de datos.
+    Protegido: Solo el dueño del perfil puede borrarlo.
     """
     candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
     if not candidato:
         raise HTTPException(status_code=404, detail="Candidato no encontrado")
+        
+    # --- 🚨 EL ESCUDO: Validación de Propiedad ---
+    if candidato.id_usuario != id_usuario_token:
+        raise HTTPException(
+            status_code=403, 
+            detail="Acceso denegado. No puedes eliminar un perfil que no te pertenece."
+        )
         
     db.delete(candidato)
     db.commit()
     
     return {"mensaje": f"Candidato con ID {id_candidato} eliminado exitosamente"}
 
-
 # --- MÓDULO DE AUTENTICACIÓN (CU1) ---
 
 @app.post("/login")
 def iniciar_sesion(credenciales: LoginRequest, db: Session = Depends(get_db)):
     """
-    Endpoint para validar credenciales de un usuario basado en los modelos reales.
+    Login Real con JWT: Verifica credenciales encriptadas y emite un token de sesión.
     """
-    # 1. Buscamos al usuario en la base de datos por su email (exactamente como está en tu BD)
-    usuario = db.query(models.Usuario).filter(models.Usuario.email == credenciales.email).first()
+    email_buscado = credenciales.email.strip().lower()
     
-    # 2. Verificamos si existe y si la contraseña coincide 
-    # (Comparamos con 'password_hash' que es como lo definiste en tu modelo)
-    if not usuario or usuario.password_hash != credenciales.password:
-        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
+    # 1. Buscar al usuario
+    usuario = db.query(models.Usuario).filter(models.Usuario.email == email_buscado).first()
+    if usuario is None:
+        raise HTTPException(status_code=401, detail="El correo no está registrado")
     
-    # 3. Si todo está correcto, enviamos los datos usando 'nombre' en vez de 'nombre_completo'
+    # 2. Verificar la contraseña usando passlib (Bcrypt)
+    if not security.verificar_password(credenciales.password, usuario.password_hash):
+        raise HTTPException(status_code=401, detail="La contraseña es incorrecta")
+    
+    # 3. Construir el "Payload" (los datos que viajan dentro del token)
+    datos_token = {
+        "sub": usuario.email,          # Standard: 'sub' (subject) es el identificador
+        "id_usuario": usuario.id_usuario,
+        "id_rol": usuario.id_rol 
+    }
+    
+    # 4. Generar el JWT
+    token_jwt = security.crear_token_acceso(data=datos_token)
+    
+    # 5. Retornar en el formato estándar OAuth2
     return {
         "mensaje": "Login exitoso",
-        "token_acceso": f"token-simulado-usuario-{usuario.id_usuario}",
+        "access_token": token_jwt,
+        "token_type": "bearer",    # Indica que es un Bearer Token
         "usuario": {
             "id_usuario": usuario.id_usuario,
             "nombre": usuario.nombre,
             "id_rol": usuario.id_rol 
+        }
+    }
+
+@app.post("/register")
+def registrar_usuario(datos: RegistroRequest, db: Session = Depends(get_db)):
+    """
+    Registra un nuevo usuario (Candidato) encriptando su contraseña.
+    """
+    email_limpio = datos.email.strip().lower()
+
+    # 1. Verificamos que el correo no exista ya en la base de datos
+    usuario_existente = db.query(models.Usuario).filter(models.Usuario.email == email_limpio).first()
+    if usuario_existente:
+        raise HTTPException(status_code=400, detail="Este correo ya está registrado en Korely")
+
+    # 2. Encriptamos la contraseña
+    hash_seguro = security.obtener_password_hash(datos.password)
+
+    # 3. Creamos el usuario en la base de datos
+    nuevo_usuario = models.Usuario(
+        nombre=datos.nombre,
+        email=email_limpio,
+        password_hash=hash_seguro,
+        id_rol=3
+    )
+    
+    db.add(nuevo_usuario)
+    db.commit()
+    db.refresh(nuevo_usuario)
+
+    return {
+        "mensaje": "Cuenta creada exitosamente",
+        "usuario": {
+            "id_usuario": nuevo_usuario.id_usuario,
+            "nombre": nuevo_usuario.nombre,
+            "email": nuevo_usuario.email
         }
     }
