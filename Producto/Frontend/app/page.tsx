@@ -79,6 +79,11 @@ export default function App() {
     setVacancies([newV, ...vacancies]);
   };
 
+  const handleUpdateVacancy = async (id: string, updatedV: Partial<Vacancy>) => {
+    const v = await apiService.updateVacancy(id, updatedV);
+    setVacancies(vacancies.map(item => item.id === id ? { ...item, ...v } : item));
+  };
+
   const handleDeleteVacancy = async (id: string) => {
     await apiService.deleteVacancy(id);
     setVacancies(vacancies.filter(v => v.id !== id));
@@ -91,16 +96,28 @@ export default function App() {
     ));
   };
 
+  const handleDeleteCandidate = async (id: string) => {
+    await apiService.deleteCandidate(id);
+    setCandidates(candidates.filter(c => c.id !== id));
+  };
+
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
         return <Dashboard candidates={candidates} />;
       case 'vacancies':
-        return <Vacancies vacancies={vacancies} onAddVacancy={handleAddVacancy} onDeleteVacancy={handleDeleteVacancy} />;
+        return (
+          <Vacancies 
+            vacancies={vacancies} 
+            onAddVacancy={handleAddVacancy} 
+            onUpdateVacancy={handleUpdateVacancy}
+            onDeleteVacancy={handleDeleteVacancy} 
+          />
+        );
       case 'ai-assistant':
         return <AIAssistant />;
       case 'matching':
-        return <Matching candidates={candidates} />;
+        return <Matching candidates={candidates} onDeleteCandidate={handleDeleteCandidate} />;
       case 'kanban':
         return <Kanban candidates={candidates} onMoveCandidate={handleMoveCandidate} />;
       case 'interview':

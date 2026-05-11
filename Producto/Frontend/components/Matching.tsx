@@ -1,15 +1,16 @@
 "use client";
 import React, { useState } from 'react';
-import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X } from 'lucide-react';
+import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Candidate } from '../types';
 import { cn } from '../lib/utils';
 
 interface MatchingProps {
   candidates: Candidate[];
+  onDeleteCandidate: (id: string) => void;
 }
 
-export function Matching({ candidates }: MatchingProps) {
+export function Matching({ candidates, onDeleteCandidate }: MatchingProps) {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
 
   return (
@@ -89,12 +90,21 @@ export function Matching({ candidates }: MatchingProps) {
                     </div>
                   </td>
                   <td className="p-4 text-right">
-                    <button 
-                      onClick={() => setSelectedCandidate(c)}
-                      className="text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center ml-auto"
-                    >
-                      <Eye size={14} className="mr-1.5" /> Ver Análisis
-                    </button>
+                    <div className="flex items-center justify-end space-x-2">
+                      <button 
+                        onClick={() => setSelectedCandidate(c)}
+                        className="text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center"
+                      >
+                        <Eye size={14} className="mr-1.5" /> Ver Análisis
+                      </button>
+                      <button 
+                        onClick={() => onDeleteCandidate(c.id)}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        title="Eliminar candidato"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

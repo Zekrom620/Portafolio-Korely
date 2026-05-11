@@ -1,4 +1,4 @@
-// File: C:\Users\ZEKROM\Desktop\Portafolio-Korely\02_Producto\Frontend\app\page.tsx
+// File: C:\Users\ZEKROM\Desktop\Portafolio-Korely\Producto\Frontend\app\page.tsx
 import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

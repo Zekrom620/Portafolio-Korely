@@ -7,10 +7,12 @@ import { Vacancy } from '../types';
 interface VacanciesProps {
   vacancies: Vacancy[];
   onAddVacancy: (v: Vacancy) => void;
+  onUpdateVacancy: (id: string, v: Partial<Vacancy>) => void;
   onDeleteVacancy: (id: string) => void;
 }
 
-export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: VacanciesProps) {
+export function Vacancies({ vacancies, onAddVacancy, onUpdateVacancy, onDeleteVacancy }: VacanciesProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     area: 'Contenido',
@@ -21,23 +23,23 @@ export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: Vacancie
     descripcion: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.title) return;
+  const handleEdit = (v: Vacancy) => {
+    setEditingId(v.id);
+    setFormData({
+      title: v.title,
+      area: v.area || 'Contenido',
+      seniority: v.seniority || 'Junior',
+      mode: v.mode || 'Remoto',
+      salary: v.salary || '',
+      skills: v.skills?.join(', ') || '',
+      descripcion: v.descripcion || ''
+    });
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-    const newVac: Vacancy = {
-      id: '', // Will be assigned by backend
-      title: formData.title,
-      area: formData.area,
-      mode: formData.mode,
-      seniority: formData.seniority,
-      salary: formData.salary,
-      skills: formData.skills.split(',').map(s => s.trim()),
-      createdAt: '', // Will be assigned by backend
-      descripcion: formData.descripcion
-    };
-
-    onAddVacancy(newVac);
+  const handleCancel = () => {
+    setEditingId(null);
     setFormData({
       title: '',
       area: 'Contenido',
@@ -49,6 +51,39 @@ export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: Vacancie
     });
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title) return;
+
+    if (editingId) {
+      onUpdateVacancy(editingId, {
+        title: formData.title,
+        descripcion: formData.descripcion,
+        area: formData.area,
+        mode: formData.mode,
+        seniority: formData.seniority,
+        salary: formData.salary,
+        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean)
+      });
+      handleCancel();
+    } else {
+      const newVac: Vacancy = {
+        id: '', // Will be assigned by backend
+        title: formData.title,
+        area: formData.area,
+        mode: formData.mode,
+        seniority: formData.seniority,
+        salary: formData.salary,
+        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
+        createdAt: '', // Will be assigned by backend
+        descripcion: formData.descripcion
+      };
+
+      onAddVacancy(newVac);
+      handleCancel();
+    }
+  };
+
   return (
     <div className="space-y-8">
       <motion.div 
@@ -57,7 +92,7 @@ export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: Vacancie
         className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200"
       >
         <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center">
-          <Plus className="mr-2 text-blue-500" size={20} /> Crear Nueva Vacante
+          <Plus className="mr-2 text-blue-500" size={20} /> {editingId ? 'Editar Vacante' : 'Crear Nueva Vacante'}
         </h3>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
@@ -140,12 +175,21 @@ export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: Vacancie
               placeholder="SEO, Redacción periodística, Inglés B2..."
             ></textarea>
           </div>
-          <div className="md:col-span-3 flex justify-end">
+          <div className="md:col-span-3 flex justify-end space-x-3">
+            {editingId && (
+              <button 
+                type="button"
+                onClick={handleCancel}
+                className="bg-slate-100 text-slate-600 px-8 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all active:scale-95"
+              >
+                Cancelar
+              </button>
+            )}
             <button 
               type="submit"
               className="bg-[#1e3a5f] text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-blue-900/10 active:scale-95"
             >
-              Publicar con Korely
+              {editingId ? 'Guardar Cambios' : 'Publicar con Korely'}
             </button>
           </div>
         </form>
@@ -180,7 +224,10 @@ export function Vacancies({ vacancies, onAddVacancy, onDeleteVacancy }: Vacancie
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                <button 
+                  onClick={() => handleEdit(v)}
+                  className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                >
                   <Edit2 size={18} />
                 </button>
                 <button 

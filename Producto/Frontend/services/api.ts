@@ -200,6 +200,23 @@ Salario: ${vacancy.salary}
     };
   },
 
+  updateVacancy: async (id: string, vacancy: Partial<Vacancy>): Promise<Vacancy> => {
+    // El backend espera titulo y descripcion.
+    const data = await handleFetch(`${API_URL}/vacantes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        titulo: vacancy.title,
+        descripcion: vacancy.descripcion,
+      }),
+    });
+    return {
+      ...data,
+      id: data.id_vacante.toString(),
+      title: data.titulo,
+      createdAt: data.fecha_creacion,
+    };
+  },
+
   deleteVacancy: (id: string): Promise<void> => 
     handleFetch(`${API_URL}/vacantes/${id}`, { method: 'DELETE' }),
 
@@ -221,6 +238,9 @@ Salario: ${vacancy.salary}
         estado: candidate.status, // Mapear status a estado para el backend
       }),
     }),
+
+  deleteCandidate: (id: string): Promise<void> => 
+    handleFetch(`${API_URL}/candidatos/${id}`, { method: 'DELETE' }),
 
   uploadCv: async (formData: FormData): Promise<any> => {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
