@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900;
+}
+
+.glass-card {
+  @apply bg-white/80 backdrop-blur-md border border-slate-200/60 shadow-sm;
+}
+
+.sidebar-link-active {
+  @apply bg-white/10 border-l-4 border-blue-500 text-white;
+}

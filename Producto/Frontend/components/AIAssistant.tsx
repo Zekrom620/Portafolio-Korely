@@ -1,0 +1,143 @@
+"use client";
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Message } from '../types';
+import { getGeminiResponse } from '../services/ai';
+
+export function AIAssistant() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: 'Hola, soy Korely. 👋 Estoy lista para ayudarte a definir la vacante ideal para **Cipress**. ¿Qué tipo de profesional estás buscando hoy?',
+      timestamp: Date.now()
+    }
+  ]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+      timestamp: Date.now()
+    };
+
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setIsLoading(true);
+
+    const systemPrompt = `Eres Korely, un experto en reclutamiento para Cipress. 
+    Ayuda al reclutador a definir los requisitos de la vacante. 
+    Haz contrapreguntas inteligentes sobre experiencia, portafolio y modalidad.
+    Mantén un tono profesional, servicial y experto.
+    Usa formato markdown para resaltar puntos clave.`;
+
+    const response = await getGeminiResponse(input, systemPrompt);
+
+    const botMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: response,
+      timestamp: Date.now()
+    };
+
+    setMessages(prev => [...prev, botMsg]);
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col flex-1">
+        <div className="bg-[#1e3a5f] p-4 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center">
+            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center mr-3 border-2 border-white/20 shadow-inner">
+              <Bot className="text-white" size={20} />
+            </div>
+            <div>
+              <p className="font-bold font-display">Korely AI</p>
+              <p className="text-[10px] text-blue-200 font-medium uppercase tracking-wider">Asistente de Perfilamiento</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+            <span className="text-xs font-medium">Online</span>
+          </div>
+        </div>
+        
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`flex items-end space-x-2 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm ${msg.role === 'user' ? 'bg-blue-600' : 'bg-white border border-slate-200'}`}>
+                    {msg.role === 'user' ? <User size={14} className="text-white" /> : <Bot size={14} className="text-blue-600" />}
+                  </div>
+                  <div className={`p-4 rounded-2xl shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'bg-blue-600 text-white rounded-tr-none' 
+                      : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                  }`}>
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {isLoading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+              <div className="flex items-center space-x-2 bg-white border border-slate-200 p-3 rounded-2xl rounded-tl-none shadow-sm">
+                <Loader2 size={16} className="animate-spin text-blue-600" />
+                <span className="text-xs text-slate-500 font-medium italic">Korely está analizando...</span>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        <div className="p-4 border-t bg-white shrink-0">
+          <div className="flex space-x-3">
+            <div className="relative flex-1">
+              <input 
+                type="text" 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend()}
+                placeholder="Ej: Busco un periodista para redes sociales..." 
+                className="w-full border border-slate-200 rounded-full px-5 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+              />
+              <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" size={16} />
+            </div>
+            <button 
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-90 disabled:opacity-50 disabled:scale-100"
+            >
+              <Send size={20} />
+            </button>
+          </div>
+          <p className="text-[10px] text-center text-slate-400 mt-3 font-medium flex items-center justify-center">
+            <Sparkles size={10} className="mr-1" /> Korely utiliza procesamiento de lenguaje natural avanzado para entender contextos complejos.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
