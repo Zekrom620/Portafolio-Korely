@@ -1,10 +1,15 @@
-export type CandidateStatus = 'Pendiente' | 'Entrevistando' | 'Finalista' | 'Contratado' | 'Rechazado';
+export type CandidateStatus = 'Postulado' | 'Entrevistado' | 'Seleccionado';
 
 export interface User {
   id_usuario: number;
-  nombre_usuario: string;
+  id_candidato?: number;
+  nombre_usuario?: string;
+  nombre?: string;
+  name?: string;
   email: string;
   rol: 'Admin' | 'Gerente' | 'Postulante';
+  id_rol?: number;
+  telefono?: string;
 }
 
 export interface AuthResponse {
@@ -19,6 +24,7 @@ export interface Candidate {
   nombre_completo: string;
   cv_texto?: string;
   analisis_ia?: any;
+  cv_estructurado_analisis_ia?: any;
   score_ia?: number;
   telefono?: string;
   id_vacante?: number;

@@ -1,27 +1,34 @@
 "use client";
-import React from 'react';
-import { MoreVertical, ChevronRight } from 'lucide-react';
+import { MoreVertical, ChevronRight, User, Briefcase, Trash2, Mail, Phone } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Candidate, CandidateStatus } from '../types';
+import { Candidate, CandidateStatus, Vacancy } from '../types';
 import { cn } from '../lib/utils';
 
 interface KanbanProps {
   candidates: Candidate[];
+  vacancies: Vacancy[];
   onMoveCandidate: (id: string, nextStatus: CandidateStatus) => void;
+  onDeleteCandidate: (id: string) => void;
 }
 
-export function Kanban({ candidates, onMoveCandidate }: KanbanProps) {
+export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandidate }: KanbanProps) {
   const columns: { id: CandidateStatus; label: string; color: string }[] = [
-    { id: 'Pendiente', label: 'Pendiente', color: 'bg-slate-100 text-slate-700' },
-    { id: 'Entrevistando', label: 'Entrevistando', color: 'bg-amber-100 text-amber-700' },
-    { id: 'Finalista', label: 'Finalista', color: 'bg-purple-100 text-purple-700' },
-    { id: 'Contratado', label: 'Contratado', color: 'bg-emerald-100 text-emerald-700' },
-    { id: 'Rechazado', label: 'Rechazado', color: 'bg-red-100 text-red-700' },
+    { id: 'Postulado', label: 'Postulado', color: 'bg-slate-100 text-slate-700' },
+    { id: 'Entrevistado', label: 'Entrevistado', color: 'bg-amber-100 text-amber-700' },
+    { id: 'Seleccionado', label: 'Seleccionado', color: 'bg-emerald-100 text-emerald-700' },
   ];
 
   const getNextStatus = (current: CandidateStatus): CandidateStatus | null => {
-    const idx = columns.findIndex(c => c.id === current);
-    return idx < columns.length - 1 ? columns[idx + 1].id : null;
+    if (current === 'Postulado') return 'Entrevistado';
+    if (current === 'Entrevistado') return 'Seleccionado';
+    return null;
+  };
+
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('¿Está seguro de que desea eliminar este candidato del proceso?')) {
+      onDeleteCandidate(id);
+    }
   };
 
   return (
@@ -30,14 +37,12 @@ export function Kanban({ candidates, onMoveCandidate }: KanbanProps) {
         {columns.map((col) => {
           const colCandidates = candidates.filter(c => c.status === col.id);
           return (
-            <div key={col.id} className="min-w-[300px] w-[300px] bg-slate-100/50 rounded-2xl p-4 flex flex-col border border-slate-200/50">
+            <div key={col.id} className="min-w-[320px] w-[320px] bg-slate-100/50 rounded-2xl p-4 flex flex-col border border-slate-200/50">
               <div className="flex justify-between items-center mb-6 px-2">
                   <h4 className="font-bold text-slate-700 uppercase text-[10px] tracking-widest flex items-center">
                     <span className={cn("w-2 h-2 rounded-full mr-2", 
-                      col.id === 'Pendiente' ? 'bg-slate-400' : 
-                      col.id === 'Entrevistando' ? 'bg-amber-500' : 
-                      col.id === 'Finalista' ? 'bg-purple-500' : 
-                      col.id === 'Contratado' ? 'bg-emerald-500' : 'bg-red-500'
+                      col.id === 'Postulado' ? 'bg-slate-400' : 
+                      col.id === 'Entrevistado' ? 'bg-amber-500' : 'bg-emerald-500'
                     )}></span>
                     {col.label}
                   </h4>
@@ -57,15 +62,35 @@ export function Kanban({ candidates, onMoveCandidate }: KanbanProps) {
                   >
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md border border-blue-100">
-                        {c.score_ia || 0}% Match
+                        {c.score_ia || c.analisis_ia?.score_ia || c.match || 0}% Match
                       </span>
-                      <button className="text-slate-300 hover:text-slate-600 transition-colors">
-                        <MoreVertical size={14} />
+                      <button 
+                        onClick={(e) => handleDelete(e, c.id)}
+                        className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                        title="Eliminar del proceso"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                     
                     <p className="font-bold text-sm text-slate-800 mb-1">{c.nombre_completo}</p>
-                    <p className="text-xs text-slate-500 mb-4">{c.id_usuario ? 'Usuario' : 'Candidato'}</p>
+                    <div className="flex flex-col space-y-2 mb-4">
+                      {c.id_vacante && (
+                        <p className="text-[10px] text-blue-600 font-bold flex items-center bg-blue-50 px-2 py-0.5 rounded w-fit max-w-full">
+                          <Briefcase size={10} className="mr-1 shrink-0" /> 
+                          <span className="truncate">{vacancies.find(v => v.id == c.id_vacante?.toString())?.title || 'Vacante #' + c.id_vacante}</span>
+                        </p>
+                      )}
+                      
+                      <div className="grid grid-cols-1 gap-1">
+                        <p className="text-[10px] text-slate-500 flex items-center">
+                          <Mail size={10} className="mr-1 shrink-0" /> <span className="truncate">{c.email || 'Sin correo'}</span>
+                        </p>
+                        <p className="text-[10px] text-slate-500 flex items-center">
+                          <Phone size={10} className="mr-1 shrink-0" /> {c.telefono || 'Sin teléfono'}
+                        </p>
+                      </div>
+                    </div>
                     
                     <div className="flex justify-between items-center pt-3 border-t border-slate-50">
                       <div className="flex -space-x-2">
@@ -81,7 +106,7 @@ export function Kanban({ candidates, onMoveCandidate }: KanbanProps) {
                           onClick={() => onMoveCandidate(c.id, getNextStatus(c.status)!)}
                           className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center transition-colors group-hover:translate-x-1 duration-300"
                         >
-                          MOVER <ChevronRight size={12} className="ml-0.5" />
+                          AVANZAR <ChevronRight size={12} className="ml-0.5" />
                         </button>
                       )}
                     </div>

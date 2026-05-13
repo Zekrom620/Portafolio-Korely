@@ -7,11 +7,19 @@ import { cn } from '../lib/utils';
 
 interface MatchingProps {
   candidates: Candidate[];
+  vacancies: Vacancy[];
   onDeleteCandidate: (id: string) => void;
 }
 
-export function Matching({ candidates, onDeleteCandidate }: MatchingProps) {
+export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingProps) {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+
+  const getDisplayScore = (candidate: Candidate) => {
+    if (candidate.score_ia !== undefined && candidate.score_ia !== null) return candidate.score_ia;
+    if (candidate.analisis_ia?.score_ia !== undefined) return candidate.analisis_ia.score_ia;
+    if (candidate.match !== undefined && candidate.match !== null) return candidate.match;
+    return 0;
+  };
 
   return (
     <div className="space-y-6">
@@ -39,75 +47,88 @@ export function Matching({ candidates, onDeleteCandidate }: MatchingProps) {
               <tr>
                 <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Candidato</th>
                 <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Cargo / Experiencia</th>
+                <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Vacante Aplicada</th>
                 <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider text-center">Score IA</th>
                 <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">Habilidades Clave</th>
                 <th className="p-4 font-semibold text-slate-600 text-xs uppercase tracking-wider text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {candidates.map((c) => (
-                <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
-                  <td className="p-4">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold mr-3 border border-indigo-200 group-hover:scale-110 transition-transform">
-                        {(c.nombre_completo || 'User').split(' ').map(n => n[0]).join('')}
+              {candidates.map((c) => {
+                const tableScore = getDisplayScore(c);
+                return (
+                  <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <td className="p-4">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold mr-3 border border-indigo-200 group-hover:scale-110 transition-transform">
+                          {(c.nombre_completo || 'User').split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <span className="font-bold text-slate-800 block">{c.nombre_completo}</span>
+                          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">ID: {c.id}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="font-bold text-slate-800 block">{c.nombre_completo}</span>
-                        <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">ID: {c.id}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <p className="text-sm text-slate-700 font-semibold">{c.id_usuario ? 'Usuario Registrado' : 'Candidato Externo'}</p>
-                    <p className="text-xs text-slate-500">{c.telefono || 'Sin teléfono'}</p>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-col items-center">
-                      <span className={cn(
-                        "text-sm font-bold mb-1",
-                        (c.score_ia || 0) > 80 ? 'text-emerald-600' : (c.score_ia || 0) > 70 ? 'text-amber-600' : 'text-slate-600'
-                      )}>{c.score_ia || 0}%</span>
-                      <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full transition-all duration-1000",
-                            (c.score_ia || 0) > 80 ? 'bg-emerald-500' : (c.score_ia || 0) > 70 ? 'bg-amber-500' : 'bg-slate-400'
-                          )} 
-                          style={{ width: `${c.score_ia || 0}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-1.5">
-                      {c.analisis_ia?.habilidades_tecnicas?.slice(0, 3).map((s: string) => (
-                        <span key={s} className="bg-blue-50 text-blue-700 text-[10px] px-2 py-0.5 rounded-md border border-blue-100 font-medium">
-                          {s}
+                    </td>
+                    <td className="p-4">
+                      <p className="text-sm text-slate-700 font-semibold">{c.id_usuario ? 'Usuario Registrado' : 'Candidato Externo'}</p>
+                      <p className="text-xs text-slate-500">{c.telefono || 'Sin teléfono'}</p>
+                    </td>
+                    <td className="p-4">
+                      {c.id_vacante ? (
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                           {vacancies.find(v => v.id == c.id_vacante?.toString())?.title || 'Vacante #' + c.id_vacante}
                         </span>
-                      ))}
-                      {!c.analisis_ia?.habilidades_tecnicas && <span className="text-slate-400 text-[10px]">Sin análisis</span>}
-                    </div>
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button 
-                        onClick={() => setSelectedCandidate(c)}
-                        className="text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center"
-                      >
-                        <Eye size={14} className="mr-1.5" /> Ver Análisis
-                      </button>
-                      <button 
-                        onClick={() => onDeleteCandidate(c.id)}
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                        title="Eliminar candidato"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">No postulado</span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-col items-center">
+                        <span className={cn(
+                          "text-sm font-bold mb-1",
+                          tableScore > 80 ? 'text-emerald-600' : tableScore > 70 ? 'text-amber-600' : 'text-slate-600'
+                        )}>{tableScore}%</span>
+                        <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className={cn(
+                              "h-full transition-all duration-1000",
+                              tableScore > 80 ? 'bg-emerald-500' : tableScore > 70 ? 'bg-amber-500' : 'bg-slate-400'
+                            )} 
+                            style={{ width: `${tableScore}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {c.analisis_ia?.habilidades_tecnicas?.slice(0, 3).map((s: string) => (
+                          <span key={s} className="bg-blue-50 text-blue-700 text-[10px] px-2 py-0.5 rounded-md border border-blue-100 font-medium">
+                            {s}
+                          </span>
+                        ))}
+                        {!c.analisis_ia?.habilidades_tecnicas && <span className="text-slate-400 text-[10px]">Sin análisis</span>}
+                      </div>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button 
+                          onClick={() => setSelectedCandidate(c)}
+                          className="text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all flex items-center"
+                        >
+                          <Eye size={14} className="mr-1.5" /> Ver Análisis
+                        </button>
+                        <button 
+                          onClick={() => onDeleteCandidate(c.id)}
+                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          title="Eliminar candidato"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -152,18 +173,24 @@ export function Matching({ candidates, onDeleteCandidate }: MatchingProps) {
                   <ul className="text-sm text-slate-700 leading-relaxed list-disc list-inside">
                     {selectedCandidate.analisis_ia?.fortalezas?.map((f: string, i: number) => (
                       <li key={i}>{f}</li>
+                    )) || selectedCandidate.analisis_ia?.expertiz_previas?.map((f: string, i: number) => (
+                      <li key={i}>{f}</li>
+                    )) || selectedCandidate.analisis_ia?.puntos_fuertes?.map((f: string, i: number) => (
+                      <li key={i}>{f}</li>
                     )) || <li>No hay fortalezas registradas.</li>}
                   </ul>
                 </div>
                 
                 <div className="p-5 bg-amber-50 border border-amber-100 rounded-2xl">
                   <p className="text-xs font-bold text-amber-700 uppercase mb-2 flex items-center">
-                    <TrendingDown size={14} className="mr-1" /> Brechas Detectadas
+                    <TrendingDown size={14} className="mr-1" /> Análisis Detallado / Brechas
                   </p>
                   <ul className="text-sm text-slate-700 leading-relaxed list-disc list-inside">
                     {selectedCandidate.analisis_ia?.brechas?.map((b: string, i: number) => (
                       <li key={i}>{b}</li>
-                    )) || <li>No hay brechas registradas.</li>}
+                    )) || selectedCandidate.analisis_ia?.aspectos_a_mejorar?.map((b: string, i: number) => (
+                      <li key={i}>{b}</li>
+                    )) || (selectedCandidate.analisis_ia?.mensaje ? <li>{selectedCandidate.analisis_ia.mensaje}</li> : <li>Análisis generado por Korely AI.</li>)}
                   </ul>
                 </div>
                 
@@ -182,10 +209,10 @@ export function Matching({ candidates, onDeleteCandidate }: MatchingProps) {
                     <TrendingUp size={14} className="text-emerald-500" />
                   </div>
                   <div className="flex items-center">
-                    <span className="text-2xl font-bold text-slate-800 mr-2">{selectedCandidate.score_ia || 0}/100</span>
+                    <span className="text-2xl font-bold text-slate-800 mr-2">{getDisplayScore(selectedCandidate)}/100</span>
                     <div className="flex space-x-0.5">
                       {[10,30,50,70,90].map(i => (
-                        <div key={i} className={cn("w-3 h-5 rounded-sm", (selectedCandidate.score_ia || 0) >= i ? "bg-emerald-500" : "bg-slate-200")}></div>
+                        <div key={i} className={cn("w-3 h-5 rounded-sm", getDisplayScore(selectedCandidate) >= i ? "bg-emerald-500" : "bg-slate-200")}></div>
                       ))}
                     </div>
                   </div>

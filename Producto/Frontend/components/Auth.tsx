@@ -19,7 +19,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
     nombre_usuario: '',
     email: '',
     password: '',
-    rol: 'Gerente' as 'Gerente' | 'Postulante',
+    rol: 'Postulante' as 'Gerente' | 'Postulante',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,23 +85,6 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                       onChange={(e) => setFormData({ ...formData, nombre_usuario: e.target.value })}
                       required={!isLogin}
                     />
-                  </div>
-                  
-                  <div className="flex bg-slate-50 p-1 rounded-2xl">
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, rol: 'Gerente' })}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${formData.rol === 'Gerente' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      Gerente (Empresa)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, rol: 'Postulante' })}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${formData.rol === 'Postulante' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                      Postulante
-                    </button>
                   </div>
                 </motion.div>
               )}

@@ -126,7 +126,7 @@ export function Interview({ candidates }: InterviewProps) {
                   <Star className="mr-2 text-amber-500" size={18} /> Episodio Diferenciador
                 </h4>
                 <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 italic text-sm text-slate-700 leading-relaxed">
-                  "Lideró la cobertura digital durante una contingencia crítica en Cipress, aumentando el tráfico en 40% mediante estrategias SEO en tiempo real y coordinación de equipo remoto bajo alta presión."
+                  &quot;Lideró la cobertura digital durante una contingencia crítica en Cipress, aumentando el tráfico en 40% mediante estrategias SEO en tiempo real y coordinación de equipo remoto bajo alta presión.&quot;
                 </div>
               </div>
             </div>

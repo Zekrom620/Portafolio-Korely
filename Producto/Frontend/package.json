@@ -7,7 +7,8 @@
     "dev": "next dev -p 3000 -H 0.0.0.0",
     "build": "next build",
     "start": "next start -p 3000 -H 0.0.0.0",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -21,14 +22,20 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.0.0",
     "tailwindcss": "^3.3.0",
-    "typescript": "~5.7.0"
+    "typescript": "~5.7.0",
+    "vitest": "^4.1.6"
   }
 }

@@ -46,7 +46,7 @@ const handleFetch = async (url: string, options?: RequestInit, fallbackKey?: str
         ...getAuthHeaders(),
         ...options?.headers,
       },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000), // Aumentado a 15 segundos
     });
     
     if (res.status === 401) {
@@ -106,6 +106,11 @@ export const apiService = {
       const user = data.user || data.usuario || data;
       const token = data.access_token || data.token;
 
+      // Mapeo de id_rol a rol (string) para compatibilidad con el frontend
+      if (user.id_rol === 1) user.rol = 'Admin';
+      else if (user.id_rol === 2) user.rol = 'Gerente';
+      else if (user.id_rol === 3) user.rol = 'Postulante'; 
+
       if (!token) {
         throw new Error('El servidor no devolvió un token de acceso');
       }
@@ -127,8 +132,8 @@ export const apiService = {
 
   register: async (user: any): Promise<any> => {
     // El backend espera 'nombre'.
-    // Asignamos el ID de rol: 1 para Gerente, 2 para Postulante.
-    const id_rol = user.rol === 'gerente' ? 1 : 2;
+    // Por seguridad, todas las nuevas cuentas desde el frontend son 'Postulante' (3).
+    const id_rol = 3;
 
     const res = await fetch(`${API_URL}/register`, {
       method: 'POST',
@@ -156,7 +161,15 @@ export const apiService = {
     localStorage.removeItem(STORAGE_KEYS.USER);
   },
 
-  getCurrentUser: (): User | null => getLocalStorage(STORAGE_KEYS.USER, null),
+  getCurrentUser: (): User | null => {
+    const user = getLocalStorage<any>(STORAGE_KEYS.USER, null);
+    if (user && user.id_rol) {
+      if (user.id_rol === 1) user.rol = 'Admin';
+      else if (user.id_rol === 2) user.rol = 'Gerente';
+      else if (user.id_rol === 3) user.rol = 'Postulante';
+    }
+    return user;
+  },
 
   // Vacantes
   getVacancies: async (): Promise<Vacancy[]> => {
@@ -182,11 +195,14 @@ Seniority: ${vacancy.seniority}
 Salario: ${vacancy.salary}
 `.trim();
 
+    const user = this.getCurrentUser();
     const v = await handleFetch(`${API_URL}/vacantes`, {
       method: 'POST',
       body: JSON.stringify({
         titulo: vacancy.title,
         descripcion: descripcionCompleta,
+        area: vacancy.area,
+        id_gerente_creador: user?.id_usuario || 1 
       }),
     });
     return { 
@@ -223,36 +239,84 @@ Salario: ${vacancy.salary}
   // Candidatos
   getCandidates: async (): Promise<Candidate[]> => {
     const data = await handleFetch(`${API_URL}/candidatos`, {}, STORAGE_KEYS.CANDIDATES, INITIAL_CANDIDATES);
-    return data.map((c: any) => ({
-      ...c,
-      id: c.id_candidato?.toString(),
-      status: c.estado || 'Pendiente'
-    }));
+    return data.map((c: any) => {
+      let analisis = c.cv_estructurado_analisis_ia || c.analisis_ia;
+      if (typeof analisis === 'string') {
+        try {
+          analisis = JSON.parse(analisis);
+        } catch (e) {
+          console.error('Error parsing analisis_ia:', e);
+        }
+      }
+      return {
+        ...c,
+        id: c.id_candidato?.toString(),
+        status: c.estado || 'Postulado',
+        analisis_ia: analisis,
+        id_vacante: c.id_vacante
+      };
+    });
   },
 
-  updateCandidate: (id: string, candidate: Partial<Candidate>): Promise<Candidate> => 
-    handleFetch(`${API_URL}/candidatos/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        ...candidate,
-        estado: candidate.status, // Mapear status a estado para el backend
-      }),
-    }),
-
-  deleteCandidate: (id: string): Promise<void> => 
-    handleFetch(`${API_URL}/candidatos/${id}`, { method: 'DELETE' }),
-
-  uploadCv: async (formData: FormData): Promise<any> => {
+  updateCandidate: async (id: string, candidate: Partial<Candidate>): Promise<Candidate> => {
+    const formData = new FormData();
+    if (candidate.nombre_completo) formData.append('nombre_completo', candidate.nombre_completo);
+    if (candidate.telefono) formData.append('telefono', candidate.telefono);
+    if (candidate.status) formData.append('estado', candidate.status);
+    
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    const res = await fetch(`${API_URL}/candidatos/upload-cv`, {
-      method: 'POST',
+    const res = await fetch(`${API_URL}/candidatos/${id}`, {
+      method: 'PUT',
       headers: {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       },
       body: formData,
     });
 
-    if (!res.ok) throw new Error('Error al subir CV');
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Error al actualizar candidato' }));
+      throw new Error(error.detail || 'Error al actualizar candidato');
+    }
     return res.json();
+  },
+
+  deleteCandidate: (id: string): Promise<void> => 
+    handleFetch(`${API_URL}/candidatos/${id}`, { method: 'DELETE' }),
+
+  createPostulacion: async (idVacante: number): Promise<any> => {
+    const res = await handleFetch(`${API_URL}/postulaciones`, {
+      method: 'POST',
+      body: JSON.stringify({ id_vacante: idVacante }),
+    });
+    return res;
+  },
+
+  uploadCv: async (formData: FormData): Promise<any> => {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    try {
+      const res = await fetch(`${API_URL}/candidatos/upload-cv`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: 'Error desconocido en el servidor' }));
+        console.error('Error detallado del backend:', JSON.stringify(error, null, 2));
+        
+        const message = Array.isArray(error.detail) 
+          ? error.detail.map((d: any) => `${d.loc?.join('.') || 'error'}: ${d.msg}`).join(', ')
+          : (typeof error.detail === 'string' ? error.detail : `Error ${res.status}: ${JSON.stringify(error)}`);
+          
+        throw new Error(message);
+      }
+
+      return res.json();
+    } catch (error) {
+      console.error('Error de red al subir CV:', error);
+      throw error;
+    }
   }
 };

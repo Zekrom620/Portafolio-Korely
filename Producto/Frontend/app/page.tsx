@@ -7,6 +7,7 @@ import { AIAssistant } from '../components/AIAssistant';
 import { Matching } from '../components/Matching';
 import { Kanban } from '../components/Kanban';
 import { Interview } from '../components/Interview';
+import { UserProfile } from '../components/UserProfile';
 import Auth from '../components/Auth';
 import { INITIAL_CANDIDATES, INITIAL_VACANCIES } from '../constants';
 import { Candidate, Vacancy, CandidateStatus, User } from '../types';
@@ -20,6 +21,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+
+  const refreshData = async () => {
+    try {
+      const [vData, cData] = await Promise.all([
+        apiService.getVacancies(),
+        apiService.getCandidates()
+      ]);
+      if (vData) setVacancies(vData);
+      if (cData) setCandidates(cData);
+      return { vData, cData };
+    } catch (error) {
+      console.error("Refresh Error:", error);
+      return { vData: null, cData: null };
+    }
+  };
 
   const initApp = async () => {
     try {
@@ -39,7 +55,19 @@ export default function App() {
         ]);
         
         if (vData) setVacancies(vData);
-        if (cData) setCandidates(cData);
+        if (cData) {
+          setCandidates(cData);
+          // Si es un postulante, buscar su id_candidato vinculando id_usuario
+          if (currentUser.id_rol === 3 || currentUser.rol === 'Postulante') {
+            const myCandidate = cData.find(c => c.id_usuario === currentUser.id_usuario);
+            if (myCandidate) {
+              const enrichedUser = { ...currentUser, id_candidato: parseInt(myCandidate.id) };
+              setUser(enrichedUser);
+              // Actualizamos en localStorage para persistencia
+              localStorage.setItem('korely_user', JSON.stringify(enrichedUser));
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Init Error:", error);
@@ -51,6 +79,12 @@ export default function App() {
   useEffect(() => {
     initApp();
   }, []);
+
+  useEffect(() => {
+    if (user && (activeSection === 'matching' || activeSection === 'kanban' || activeSection === 'dashboard')) {
+      refreshData();
+    }
+  }, [activeSection, user]);
 
   const handleLoginSuccess = () => {
     initApp();
@@ -90,40 +124,76 @@ export default function App() {
   };
 
   const handleMoveCandidate = async (id: string, nextStatus: CandidateStatus) => {
-    await apiService.updateCandidate(id, { status: nextStatus });
-    setCandidates(candidates.map(c => 
-      c.id === id ? { ...c, status: nextStatus } : c
-    ));
+    try {
+      await apiService.updateCandidate(id, { status: nextStatus });
+      setCandidates(candidates.map(c => 
+        c.id === id ? { ...c, status: nextStatus } : c
+      ));
+      // Refresh to ensure sync
+      setTimeout(refreshData, 500);
+    } catch (error) {
+      console.error("Move Error:", error);
+      alert("No se pudo mover el candidato. Verifique su conexión.");
+    }
   };
 
   const handleDeleteCandidate = async (id: string) => {
-    await apiService.deleteCandidate(id);
-    setCandidates(candidates.filter(c => c.id !== id));
+    try {
+      await apiService.deleteCandidate(id);
+      setCandidates(candidates.filter(c => c.id !== id));
+      // Toast o mensaje de éxito discreto si fuera necesario
+    } catch (error) {
+      console.error("Delete Error:", error);
+      alert("No se pudo eliminar al candidato. " + (error instanceof Error ? error.message : ""));
+    }
   };
+
+  const handleApply = async (vId: string) => {
+    try {
+      const myCandidate = candidates.find(c => c.id_usuario === user?.id_usuario);
+      if (!myCandidate) {
+        alert("Primero debes subir un CV en 'Mi Perfil' para que Korely AI analice tu perfil.");
+        setActiveSection('profile');
+        return;
+      }
+      await apiService.createPostulacion(parseInt(vId));
+      alert("¡Postulación generada exitosamente! El equipo de reclutamiento revisará tu perfil.");
+    } catch (error: any) {
+      alert("Error al postular: " + error.message);
+    }
+  };
+
+  const userRole = user?.rol || 'Postulante';
+  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
 
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <Dashboard candidates={candidates} />;
+        return <Dashboard candidates={candidates} user={user} />;
       case 'vacancies':
         return (
           <Vacancies 
             vacancies={vacancies} 
+            candidates={candidates}
+            isRecruiter={isRecruiter}
             onAddVacancy={handleAddVacancy} 
             onUpdateVacancy={handleUpdateVacancy}
-            onDeleteVacancy={handleDeleteVacancy} 
+            onDeleteVacancy={handleDeleteVacancy}
+            onApply={handleApply}
           />
         );
       case 'ai-assistant':
         return <AIAssistant />;
       case 'matching':
-        return <Matching candidates={candidates} onDeleteCandidate={handleDeleteCandidate} />;
+        return <Matching candidates={candidates} vacancies={vacancies} onDeleteCandidate={handleDeleteCandidate} />;
       case 'kanban':
-        return <Kanban candidates={candidates} onMoveCandidate={handleMoveCandidate} />;
+        return <Kanban candidates={candidates} vacancies={vacancies} onMoveCandidate={handleMoveCandidate} onDeleteCandidate={handleDeleteCandidate} />;
       case 'interview':
         return <Interview candidates={candidates} />;
+      case 'profile':
+        return <UserProfile user={user} candidates={candidates} onRefresh={refreshData} />;
       default:
-        return <Dashboard candidates={candidates} />;
+        return <Dashboard candidates={candidates} user={user} />;
     }
   };
 
@@ -134,7 +204,8 @@ export default function App() {
       'ai-assistant': 'Korely AI - Recruiter Assistant',
       matching: 'Matching Predictivo & NLP',
       kanban: 'Pipeline de Candidatos',
-      interview: 'Entrevista Conversacional'
+      interview: 'Entrevista Conversacional',
+      profile: 'Mi Perfil Profesional'
     };
     return titles[activeSection] || 'Dashboard';
   };
@@ -149,7 +220,7 @@ export default function App() {
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between pr-8 bg-white">
-          <Header title={getTitle()} />
+          <Header title={getTitle()} user={user} setActiveSection={setActiveSection} />
           <div className="flex items-center space-x-2 px-4 py-1 rounded-full text-[10px] font-bold">
             {isOnline ? (
               <span className="flex items-center text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">

@@ -25,13 +25,19 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeSection, setActiveSection, user, onLogout }: SidebarProps) {
+  const userRole = user?.rol || 'Postulante';
+  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'vacancies', label: 'Vacantes', icon: Briefcase },
     { id: 'ai-assistant', label: 'Korely Assistant', icon: Bot },
-    { id: 'matching', label: 'Matching & Base', icon: UserCheck },
-    { id: 'kanban', label: 'Pipeline Kanban', icon: Columns },
-    { id: 'interview', label: 'Entrevistar', icon: Mic },
+    ...(!isRecruiter ? [{ id: 'profile', label: 'Mi Perfil', icon: User }] : []),
+    ...(isRecruiter ? [
+      { id: 'matching', label: 'Matching & Base', icon: UserCheck },
+      { id: 'kanban', label: 'Pipeline Kanban', icon: Columns },
+      { id: 'interview', label: 'Entrevistar', icon: Mic },
+    ] : []),
   ];
 
   const getInitials = (name: string | undefined | null) => {
@@ -42,7 +48,6 @@ export function Sidebar({ activeSection, setActiveSection, user, onLogout }: Sid
   };
 
   const userName = user?.nombre_usuario || (user as any)?.nombre || (user as any)?.name || 'Usuario';
-  const userRole = user?.rol || 'Postulante';
 
   return (
     <aside className="w-64 bg-[#1e3a5f] text-white flex flex-col h-full shrink-0">
@@ -92,17 +97,30 @@ export function Sidebar({ activeSection, setActiveSection, user, onLogout }: Sid
 
 interface HeaderProps {
   title: string;
+  user: UserType | null;
+  setActiveSection: (section: string) => void;
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title, user, setActiveSection }: HeaderProps) {
+  const userRole = user?.rol || 'Postulante';
+  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
       <h2 className="text-lg font-semibold text-slate-700 font-display">{title}</h2>
       <div className="flex items-center space-x-4">
-        <button className="bg-blue-50 text-blue-600 px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-100 transition-colors flex items-center">
-          <Plus size={16} className="mr-1" /> Nueva Vacante
-        </button>
-        <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer">
+        {isRecruiter && (
+          <button 
+            onClick={() => setActiveSection('vacancies')}
+            className="bg-blue-50 text-blue-600 px-4 py-2 rounded-full text-sm font-medium hover:bg-blue-100 transition-colors flex items-center"
+          >
+            <Plus size={16} className="mr-1" /> Nueva Vacante
+          </button>
+        )}
+        <div 
+          onClick={() => setActiveSection(isRecruiter ? 'dashboard' : 'profile')}
+          className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer"
+        >
           <User size={20} />
         </div>
       </div>
