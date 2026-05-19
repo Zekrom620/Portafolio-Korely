@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Briefcase, MapPin, DollarSign, Plus, Trash2, Edit2, Search } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Vacancy } from '../types';
+import { Vacancy, Candidate } from '../types';
 
 interface VacanciesProps {
   vacancies: Vacancy[];
@@ -235,7 +235,7 @@ export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, on
                   <div className="flex items-center space-x-3 mt-1">
                     <span className="text-xs text-slate-500 flex items-center"><Briefcase size={12} className="mr-1" /> {v.area}</span>
                     <span className="text-xs text-slate-500 flex items-center"><MapPin size={12} className="mr-1" /> {v.mode}</span>
-                    <span className="text-xs text-slate-400">Publicado {v.createdAt ? new Date(v.createdAt).toLocaleDateString() : 'Recientemente'}</span>
+                    <span className="text-xs text-slate-400">Publicado {v.createdAt && new Date(v.createdAt).getFullYear() > 1970 ? new Date(v.createdAt).toLocaleDateString() : 'Recientemente'}</span>
                     {isRecruiter && (
                       <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
                         {candidates.filter(c => c.id_vacante?.toString() === v.id).length} postulantes

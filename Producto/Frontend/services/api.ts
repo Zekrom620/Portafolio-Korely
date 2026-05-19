@@ -183,7 +183,7 @@ export const apiService = {
     }));
   },
 
-  createVacancy: async (vacancy: Omit<Vacancy, 'id' | 'createdAt'>): Promise<Vacancy> => {
+  createVacancy: async function(vacancy: Omit<Vacancy, 'id' | 'createdAt'>): Promise<Vacancy> {
     // El backend solo acepta titulo y descripcion segun VacanteCreate en el video.
     // Concatenamos los otros campos en la descripcion para no perder informacion.
     const descripcionCompleta = `
@@ -258,26 +258,15 @@ Salario: ${vacancy.salary}
     });
   },
 
-  updateCandidate: async (id: string, candidate: Partial<Candidate>): Promise<Candidate> => {
-    const formData = new FormData();
-    if (candidate.nombre_completo) formData.append('nombre_completo', candidate.nombre_completo);
-    if (candidate.telefono) formData.append('telefono', candidate.telefono);
-    if (candidate.status) formData.append('estado', candidate.status);
-    
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-    const res = await fetch(`${API_URL}/candidatos/${id}`, {
+  async updateCandidate(id: string, candidate: Partial<Candidate>): Promise<Candidate> {
+    return handleFetch(`${API_URL}/candidatos/${id}`, {
       method: 'PUT',
-      headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      },
-      body: formData,
+      body: JSON.stringify({
+        nombre_completo: candidate.nombre_completo,
+        telefono: candidate.telefono,
+        estado: candidate.status,
+      }),
     });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Error al actualizar candidato' }));
-      throw new Error(error.detail || 'Error al actualizar candidato');
-    }
-    return res.json();
   },
 
   deleteCandidate: (id: string): Promise<void> => 
