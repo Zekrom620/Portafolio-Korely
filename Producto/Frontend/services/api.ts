@@ -180,28 +180,26 @@ export const apiService = {
       title: v.titulo || 'Sin título',
       descripcion: v.descripcion || '',
       createdAt: v.fecha_creacion,
+      area: v.area || 'Contenido',
+      mode: v.mode || 'Remoto',
+      seniority: v.seniority || 'Junior',
+      salary: v.salary || '',
+      skills: v.competencias || []
     }));
   },
 
   createVacancy: async function(vacancy: Omit<Vacancy, 'id' | 'createdAt'>): Promise<Vacancy> {
-    // El backend solo acepta titulo y descripcion segun VacanteCreate en el video.
-    // Concatenamos los otros campos en la descripcion para no perder informacion.
-    const descripcionCompleta = `
-${vacancy.descripcion || ''}
----
-Área: ${vacancy.area}
-Modalidad: ${vacancy.mode}
-Seniority: ${vacancy.seniority}
-Salario: ${vacancy.salary}
-`.trim();
-
     const user = this.getCurrentUser();
     const v = await handleFetch(`${API_URL}/vacantes`, {
       method: 'POST',
       body: JSON.stringify({
         titulo: vacancy.title,
-        descripcion: descripcionCompleta,
+        descripcion: vacancy.descripcion || '',
         area: vacancy.area,
+        mode: vacancy.mode,
+        seniority: vacancy.seniority,
+        salary: vacancy.salary,
+        competencias: vacancy.skills || [],
         id_gerente_creador: user?.id_usuario || 1 
       }),
     });
@@ -209,27 +207,40 @@ Salario: ${vacancy.salary}
       ...v, 
       id: v.id_vacante.toString(),
       title: v.titulo,
-      mode: vacancy.mode, // Mantenemos localmente para el UI
-      salary: vacancy.salary,
+      area: v.area,
+      mode: v.mode,
+      seniority: v.seniority,
+      salary: v.salary,
+      skills: v.competencias || [],
       createdAt: v.fecha_creacion,
       descripcion: v.descripcion
     };
   },
 
   updateVacancy: async (id: string, vacancy: Partial<Vacancy>): Promise<Vacancy> => {
-    // El backend espera titulo y descripcion.
     const data = await handleFetch(`${API_URL}/vacantes/${id}`, {
       method: 'PUT',
       body: JSON.stringify({
         titulo: vacancy.title,
         descripcion: vacancy.descripcion,
+        area: vacancy.area,
+        mode: vacancy.mode,
+        seniority: vacancy.seniority,
+        salary: vacancy.salary,
+        competencias: vacancy.skills,
       }),
     });
     return {
       ...data,
       id: data.id_vacante.toString(),
       title: data.titulo,
+      area: data.area,
+      mode: data.mode,
+      seniority: data.seniority,
+      salary: data.salary,
+      skills: data.competencias || [],
       createdAt: data.fecha_creacion,
+      descripcion: data.descripcion
     };
   },
 
@@ -240,7 +251,7 @@ Salario: ${vacancy.salary}
   getCandidates: async (): Promise<Candidate[]> => {
     const data = await handleFetch(`${API_URL}/candidatos`, {}, STORAGE_KEYS.CANDIDATES, INITIAL_CANDIDATES);
     return data.map((c: any) => {
-      let analisis = c.cv_estructurado_analisis_ia || c.analisis_ia;
+      let analisis = c.cv_estructurado || c.cv_estructurado_analisis_ia || c.analisis_ia;
       if (typeof analisis === 'string') {
         try {
           analisis = JSON.parse(analisis);
@@ -248,12 +259,41 @@ Salario: ${vacancy.salary}
           console.error('Error parsing analisis_ia:', e);
         }
       }
+
+      const id = c.id_candidato?.toString() || c.id?.toString() || '';
+      const nombre_completo = c.nombre_completo || c.name || 'Candidato sin nombre';
+
+      let status: 'Postulado' | 'Entrevistado' | 'Seleccionado' = 'Postulado';
+      const rawStatus = c.estado || c.status;
+      if (rawStatus === 'Entrevistado' || rawStatus === 'vetted') {
+        status = 'Entrevistado';
+      } else if (rawStatus === 'Seleccionado' || rawStatus === 'selected') {
+        status = 'Seleccionado';
+      }
+
+      const score_ia = c.score_ia !== undefined && c.score_ia !== null ? c.score_ia : (c.score !== undefined ? c.score : 0);
+
+      if (!analisis) {
+        analisis = {};
+      }
+      if (!analisis.fortalezas && (c.strengths || c.fortalezas)) {
+        analisis.fortalezas = c.strengths ? [c.strengths] : (Array.isArray(c.fortalezas) ? c.fortalezas : [c.fortalezas]);
+      }
+      if (!analisis.brechas && (c.gap || c.brechas)) {
+        analisis.brechas = c.gap ? [c.gap] : (Array.isArray(c.brechas) ? c.brechas : [c.brechas]);
+      }
+      if (!analisis.habilidades_tecnicas && c.skills) {
+        analisis.habilidades_tecnicas = c.skills;
+      }
+
       return {
         ...c,
-        id: c.id_candidato?.toString(),
-        status: c.estado || 'Postulado',
+        id,
+        nombre_completo,
+        status,
         analisis_ia: analisis,
-        id_vacante: c.id_vacante
+        id_vacante: c.id_vacante !== undefined ? c.id_vacante : 1,
+        score_ia
       };
     });
   },
@@ -307,5 +347,17 @@ Salario: ${vacancy.salary}
       console.error('Error de red al subir CV:', error);
       throw error;
     }
+  },
+
+  getDashboardStats: async (): Promise<any> => {
+    return handleFetch(`${API_URL}/dashboard/stats`, { method: 'GET' });
+  },
+
+  chatAssistant: async (message: string): Promise<string> => {
+    const res = await handleFetch(`${API_URL}/assistant/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ mensaje: message }),
+    });
+    return res.respuesta;
   }
 };

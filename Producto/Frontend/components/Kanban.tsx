@@ -1,4 +1,5 @@
 "use client";
+import { useState } from 'react';
 import { MoreVertical, ChevronRight, User, Briefcase, Trash2, Mail, Phone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Candidate, CandidateStatus, Vacancy } from '../types';
@@ -12,6 +13,8 @@ interface KanbanProps {
 }
 
 export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandidate }: KanbanProps) {
+  const [draggedOverCol, setDraggedOverCol] = useState<string | null>(null);
+
   const columns: { id: CandidateStatus; label: string; color: string }[] = [
     { id: 'Postulado', label: 'Postulado', color: 'bg-slate-100 text-slate-700' },
     { id: 'Entrevistado', label: 'Entrevistado', color: 'bg-amber-100 text-amber-700' },
@@ -37,7 +40,29 @@ export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandida
         {columns.map((col) => {
           const colCandidates = candidates.filter(c => c.status === col.id);
           return (
-            <div key={col.id} className="min-w-[320px] w-[320px] bg-slate-100/50 rounded-2xl p-4 flex flex-col border border-slate-200/50">
+            <div 
+              key={col.id} 
+              className={cn(
+                "min-w-[320px] w-[320px] rounded-2xl p-4 flex flex-col border transition-all duration-300",
+                draggedOverCol === col.id 
+                  ? "bg-blue-50/50 border-blue-400/80 shadow-lg shadow-blue-500/5 scale-[1.02]" 
+                  : "bg-slate-100/50 border-slate-200/50"
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+              }}
+              onDragEnter={() => {
+                setDraggedOverCol(col.id);
+              }}
+              onDragLeave={() => {
+                setDraggedOverCol(null);
+              }}
+              onDrop={(e) => {
+                setDraggedOverCol(null);
+                const id = e.dataTransfer.getData("candidateId");
+                if (id) onMoveCandidate(id, col.id);
+              }}
+            >
               <div className="flex justify-between items-center mb-6 px-2">
                   <h4 className="font-bold text-slate-700 uppercase text-[10px] tracking-widest flex items-center">
                     <span className={cn("w-2 h-2 rounded-full mr-2", 
@@ -50,7 +75,7 @@ export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandida
                   {colCandidates.length}
                 </span>
               </div>
-
+ 
               <div className="space-y-4 flex-1 overflow-y-auto pr-1">
                 {colCandidates.map((c) => (
                   <motion.div
@@ -58,7 +83,11 @@ export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandida
                     layoutId={c.id}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all group relative"
+                    draggable
+                    onDragStart={(e: any) => {
+                      e.dataTransfer.setData("candidateId", c.id);
+                    }}
+                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-all group relative cursor-grab active:cursor-grabbing"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md border border-blue-100">

@@ -3,39 +3,42 @@ import { Candidate, Vacancy } from '../types';
 export const INITIAL_CANDIDATES: Candidate[] = [
   {
     id: '1',
-    name: 'Valentina Torres',
-    role: 'Periodista Digital',
-    exp: '5 años',
-    skills: ['SEO', 'Multimedia', 'Redacción'],
-    score: 87,
-    status: 'applied',
-    strengths: 'Dominio avanzado de herramientas SEO y métricas digitales.',
-    gap: 'Experiencia limitada en gestión de equipos grandes.',
-    email: 'valentina.t@example.com'
+    id_usuario: 2,
+    nombre_completo: 'Valentina Torres',
+    email: 'valentina.t@example.com',
+    status: 'Postulado',
+    score_ia: 87,
+    analisis_ia: {
+      fortalezas: ['Dominio avanzado de herramientas SEO y métricas digitales.'],
+      brechas: ['Experiencia limitada en gestión de equipos grandes.'],
+      habilidades_tecnicas: ['SEO', 'Multimedia', 'Redacción']
+    }
   },
   {
     id: '2',
-    name: 'Rodrigo Muñoz',
-    role: 'Productor Audiovisual',
-    exp: '3 años',
-    skills: ['Edición Video', 'Adobe Premiere', 'Streaming'],
-    score: 74,
-    status: 'applied',
-    strengths: 'Excelente manejo de post-producción y flujos de streaming en vivo.',
-    gap: 'Requiere fortalecer habilidades de guionismo técnico.',
-    email: 'rodrigo.m@example.com'
+    id_usuario: 3,
+    nombre_completo: 'Rodrigo Muñoz',
+    email: 'rodrigo.m@example.com',
+    status: 'Postulado',
+    score_ia: 74,
+    analisis_ia: {
+      fortalezas: ['Excelente manejo de post-producción y flujos de streaming en vivo.'],
+      brechas: ['Requiere fortalecer habilidades de guionismo técnico.'],
+      habilidades_tecnicas: ['Edición Video', 'Adobe Premiere', 'Streaming']
+    }
   },
   {
     id: '3',
-    name: 'Camila Reyes',
-    role: 'Community Manager',
-    exp: '2 años',
-    skills: ['Redes Sociales', 'Copywriting', 'Analítica'],
-    score: 61,
-    status: 'vetted',
-    strengths: 'Alta creatividad y rapidez en respuesta a crisis de marca.',
-    gap: 'Falta experiencia en pauta publicitaria compleja (Ads Manager).',
-    email: 'camila.r@example.com'
+    id_usuario: 4,
+    nombre_completo: 'Camila Reyes',
+    email: 'camila.r@example.com',
+    status: 'Entrevistado',
+    score_ia: 61,
+    analisis_ia: {
+      fortalezas: ['Alta creatividad y rapidez en respuesta a crisis de marca.'],
+      brechas: ['Falta experiencia en pauta publicitaria compleja (Ads Manager).'],
+      habilidades_tecnicas: ['Redes Sociales', 'Copywriting', 'Analítica']
+    }
   }
 ];
 

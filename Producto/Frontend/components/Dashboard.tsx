@@ -7,9 +7,10 @@ import { Candidate, User } from '../types';
 interface DashboardProps {
   candidates: Candidate[];
   user: User | null;
+  statsData?: any;
 }
 
-export function Dashboard({ candidates, user }: DashboardProps) {
+export function Dashboard({ candidates, user, statsData }: DashboardProps) {
   const userName = user?.nombre || user?.nombre_usuario || user?.name || 'Usuario';
   const userRole = user?.rol || 'Postulante';
   const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
@@ -82,11 +83,16 @@ export function Dashboard({ candidates, user }: DashboardProps) {
     );
   }
 
+  const activeVacancies = statsData?.activeVacancies !== undefined ? statsData.activeVacancies.toString() : '0';
+  const candidatesCount = candidates.length.toString();
+  const interviewsToday = statsData?.interviewsToday !== undefined ? statsData.interviewsToday.toString() : '0';
+  const globalScore = statsData?.globalMatchingScore !== undefined ? `${statsData.globalMatchingScore}%` : '0%';
+
   const stats = [
-    { label: 'Vacantes Activas', value: '12', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', trend: '+2 este mes', trendColor: 'text-green-500' },
-    { label: 'Candidatos en Proceso', value: candidates.length.toString(), icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: 'Promedio 13 por vacante', trendColor: 'text-slate-400' },
-    { label: 'Entrevistas Hoy', value: '4', icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50', trend: 'Próxima a las 15:00', trendColor: 'text-slate-400' },
-    { label: 'Matching Score Global', value: '74%', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: '74%', trendColor: 'text-emerald-500', isProgress: true },
+    { label: 'Vacantes Activas', value: activeVacancies, icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', trend: 'Actualizado', trendColor: 'text-green-500' },
+    { label: 'Candidatos en Proceso', value: candidatesCount, icon: Users, color: 'text-indigo-600', bg: 'bg-indigo-50', trend: 'Total postulantes', trendColor: 'text-slate-400' },
+    { label: 'Entrevistas Hoy', value: interviewsToday, icon: Calendar, color: 'text-amber-600', bg: 'bg-amber-50', trend: 'En etapa de evaluación', trendColor: 'text-slate-400' },
+    { label: 'Matching Score Global', value: globalScore, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', trend: globalScore, trendColor: 'text-emerald-500', isProgress: true },
   ];
 
   return (

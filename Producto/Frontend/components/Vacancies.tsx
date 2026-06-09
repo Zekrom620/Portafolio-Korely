@@ -16,6 +16,8 @@ interface VacanciesProps {
 
 export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, onUpdateVacancy, onDeleteVacancy, onApply }: VacanciesProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     area: 'Contenido',
@@ -54,36 +56,42 @@ export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, on
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title) return;
+    if (!formData.title || loading) return;
 
-    if (editingId) {
-      onUpdateVacancy(editingId, {
-        title: formData.title,
-        descripcion: formData.descripcion,
-        area: formData.area,
-        mode: formData.mode,
-        seniority: formData.seniority,
-        salary: formData.salary,
-        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean)
-      });
-      handleCancel();
-    } else {
-      const newVac: Vacancy = {
-        id: '', // Will be assigned by backend
-        title: formData.title,
-        area: formData.area,
-        mode: formData.mode,
-        seniority: formData.seniority,
-        salary: formData.salary,
-        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
-        createdAt: '', // Will be assigned by backend
-        descripcion: formData.descripcion
-      };
+    setLoading(true);
+    try {
+      if (editingId) {
+        await onUpdateVacancy(editingId, {
+          title: formData.title,
+          descripcion: formData.descripcion,
+          area: formData.area,
+          mode: formData.mode,
+          seniority: formData.seniority,
+          salary: formData.salary,
+          skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean)
+        });
+      } else {
+        const newVac: Vacancy = {
+          id: '', // Will be assigned by backend
+          title: formData.title,
+          area: formData.area,
+          mode: formData.mode,
+          seniority: formData.seniority,
+          salary: formData.salary,
+          skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
+          createdAt: '', // Will be assigned by backend
+          descripcion: formData.descripcion
+        };
 
-      onAddVacancy(newVac);
+        await onAddVacancy(newVac);
+      }
       handleCancel();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -202,9 +210,17 @@ export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, on
               )}
               <button 
                 type="submit"
-                className="bg-[#1e3a5f] text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-blue-900/10 active:scale-95"
+                disabled={loading}
+                className="bg-[#1e3a5f] text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 disabled:bg-slate-400 disabled:scale-100 disabled:shadow-none transition-all shadow-lg shadow-blue-900/10 active:scale-95 flex items-center justify-center space-x-2 min-w-[160px]"
               >
-                {editingId ? 'Guardar Cambios' : 'Publicar con Korely'}
+                {loading ? (
+                  <>
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                    <span>Guardando...</span>
+                  </>
+                ) : (
+                  editingId ? 'Guardar Cambios' : 'Publicar con Korely'
+                )}
               </button>
             </div>
           </form>
@@ -219,12 +235,20 @@ export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, on
             <input 
               type="text" 
               placeholder="Buscar vacante..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
         </div>
         <div className="space-y-4">
-          {vacancies.map((v) => (
+          {vacancies
+            .filter(v => 
+              v.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (v.descripcion && v.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+              v.area.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            .map((v) => (
             <div key={v.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-all group">
               <div className="flex items-center space-x-4">
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg border border-blue-100">

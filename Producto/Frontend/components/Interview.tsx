@@ -227,7 +227,37 @@ export function Interview({ candidates }: InterviewProps) {
                       ? 'bg-indigo-600 text-white rounded-tr-none' 
                       : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
                   )}>
-                    {msg.content}
+                    {(() => {
+                      const lines = msg.content.split('\n');
+                      return lines.map((line, lineIdx) => {
+                        let content = line;
+                        const isBullet = line.trim().startsWith('* ') || line.trim().startsWith('- ');
+                        if (isBullet) {
+                          content = line.trim().substring(2);
+                        }
+                        
+                        const parts = content.split(/(\*\*.*?\*\*|\+\+.*?\+\+)/g);
+                        const renderedParts = parts.map((part, index) => {
+                          if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('++') && part.endsWith('++'))) {
+                            return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+                          }
+                          return part;
+                        });
+
+                        if (isBullet) {
+                          return (
+                            <li key={lineIdx} className="ml-4 list-disc text-sm leading-relaxed my-0.5">
+                              {renderedParts}
+                            </li>
+                          );
+                        }
+                        return (
+                          <p key={lineIdx} className="text-sm leading-relaxed min-h-[1.2em] my-0.5">
+                            {renderedParts}
+                          </p>
+                        );
+                      });
+                    })()}
                   </div>
                 </motion.div>
               ))}

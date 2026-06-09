@@ -27,8 +27,11 @@ export interface Candidate {
   cv_estructurado_analisis_ia?: any;
   score_ia?: number;
   telefono?: string;
+  phone?: string;
+  email?: string;
   id_vacante?: number;
   status: CandidateStatus;
+  match?: number;
 }
 
 export interface Vacancy {

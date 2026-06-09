@@ -21,19 +21,22 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
 
   const refreshData = async () => {
     try {
-      const [vData, cData] = await Promise.all([
+      const [vData, cData, sData] = await Promise.all([
         apiService.getVacancies(),
-        apiService.getCandidates()
+        apiService.getCandidates(),
+        apiService.getDashboardStats().catch(() => null)
       ]);
       if (vData) setVacancies(vData);
       if (cData) setCandidates(cData);
-      return { vData, cData };
+      if (sData) setDashboardStats(sData);
+      return { vData, cData, sData };
     } catch (error) {
       console.error("Refresh Error:", error);
-      return { vData: null, cData: null };
+      return { vData: null, cData: null, sData: null };
     }
   };
 
@@ -49,12 +52,14 @@ export default function App() {
         setIsOnline(backendReady);
 
         // Fetch data
-        const [vData, cData] = await Promise.all([
+        const [vData, cData, sData] = await Promise.all([
           apiService.getVacancies(),
-          apiService.getCandidates()
+          apiService.getCandidates(),
+          apiService.getDashboardStats().catch(() => null)
         ]);
         
         if (vData) setVacancies(vData);
+        if (sData) setDashboardStats(sData);
         if (cData) {
           setCandidates(cData);
           // Si es un postulante, buscar su id_candidato vinculando id_usuario
@@ -169,7 +174,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <Dashboard candidates={candidates} user={user} />;
+        return <Dashboard candidates={candidates} user={user} statsData={dashboardStats} />;
       case 'vacancies':
         return (
           <Vacancies 

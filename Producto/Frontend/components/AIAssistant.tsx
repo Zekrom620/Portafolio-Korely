@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Message } from '../types';
-import { getGeminiResponse } from '../services/ai';
+import { apiService } from '../services/api';
 
 export function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([
@@ -38,23 +38,29 @@ export function AIAssistant() {
     setInput('');
     setIsLoading(true);
 
-    const systemPrompt = `Eres Korely, un experto en reclutamiento para Cipress. 
-    Ayuda al reclutador a definir los requisitos de la vacante. 
-    Haz contrapreguntas inteligentes sobre experiencia, portafolio y modalidad.
-    Mantén un tono profesional, servicial y experto.
-    Usa formato markdown para resaltar puntos clave.`;
+    try {
+      const response = await apiService.chatAssistant(input);
 
-    const response = await getGeminiResponse(input, systemPrompt);
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response,
+        timestamp: Date.now()
+      };
 
-    const botMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: response,
-      timestamp: Date.now()
-    };
-
-    setMessages(prev => [...prev, botMsg]);
-    setIsLoading(false);
+      setMessages(prev => [...prev, botMsg]);
+    } catch (err) {
+      console.error(err);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: "Lo siento, hubo un problema al conectarme con el servidor de Korely.",
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -94,8 +100,38 @@ export function AIAssistant() {
                       ? 'bg-blue-600 text-white rounded-tr-none' 
                       : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
                   }`}>
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
+                    <div className="text-sm leading-relaxed">
+                      {(() => {
+                        const lines = msg.content.split('\n');
+                        return lines.map((line, lineIdx) => {
+                          let content = line;
+                          const isBullet = line.trim().startsWith('* ') || line.trim().startsWith('- ');
+                          if (isBullet) {
+                            content = line.trim().substring(2);
+                          }
+                          
+                          const parts = content.split(/(\*\*.*?\*\*|\+\+.*?\+\+)/g);
+                          const renderedParts = parts.map((part, index) => {
+                            if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('++') && part.endsWith('++'))) {
+                              return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+                            }
+                            return part;
+                          });
+
+                          if (isBullet) {
+                            return (
+                              <li key={lineIdx} className="ml-4 list-disc text-sm leading-relaxed my-1">
+                                {renderedParts}
+                              </li>
+                            );
+                          }
+                          return (
+                            <p key={lineIdx} className="text-sm leading-relaxed min-h-[1.2em] my-1">
+                              {renderedParts}
+                            </p>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 </div>

@@ -10,7 +10,14 @@ describe('Componente Kanban - CU6', () => {
   ];
 
   it('debe mostrar las columnas correctas segun el nuevo flujo de Korely', () => {
-    render(<Kanban candidates={mockCandidates} onMoveCandidate={() => {}} />);
+    render(
+      <Kanban 
+        candidates={mockCandidates} 
+        vacancies={[]} 
+        onMoveCandidate={() => {}} 
+        onDeleteCandidate={() => {}} 
+      />
+    );
     
     expect(screen.getByText('Postulado')).toBeInTheDocument();
     expect(screen.getByText('Entrevistado')).toBeInTheDocument();
@@ -18,7 +25,14 @@ describe('Componente Kanban - CU6', () => {
   });
 
   it('debe renderizar a los candidatos en sus columnas correspondientes', () => {
-    render(<Kanban candidates={mockCandidates} onMoveCandidate={() => {}} />);
+    render(
+      <Kanban 
+        candidates={mockCandidates} 
+        vacancies={[]} 
+        onMoveCandidate={() => {}} 
+        onDeleteCandidate={() => {}} 
+      />
+    );
     
     expect(screen.getByText('Juan Pérez')).toBeInTheDocument();
     expect(screen.getByText('Maria Garcia')).toBeInTheDocument();

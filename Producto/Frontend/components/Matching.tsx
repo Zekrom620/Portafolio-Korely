@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Candidate } from '../types';
+import { Candidate, Vacancy } from '../types';
 import { cn } from '../lib/utils';
 
 interface MatchingProps {
@@ -13,6 +13,9 @@ interface MatchingProps {
 
 export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingProps) {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState('Todos');
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   const getDisplayScore = (candidate: Candidate) => {
     if (candidate.score_ia !== undefined && candidate.score_ia !== null) return candidate.score_ia;
@@ -20,6 +23,22 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
     if (candidate.match !== undefined && candidate.match !== null) return candidate.match;
     return 0;
   };
+
+  const filteredCandidates = candidates.filter(c => {
+    const score = getDisplayScore(c);
+    const candidateName = c.nombre_completo || '';
+    const matchesSearch = candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.analisis_ia?.habilidades_tecnicas?.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (c.id_vacante && vacancies.find(v => v.id == c.id_vacante?.toString())?.title.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    if (selectedFilter === 'Todos') return true;
+    if (selectedFilter === 'Alto Match (>80%)') return score > 80;
+    if (selectedFilter === 'Medio Match (70-80%)') return score >= 70 && score <= 80;
+    if (selectedFilter === 'Bajo Match (<70%)') return score < 70;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -31,12 +50,35 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
             <input 
               type="text" 
               placeholder="Filtrar candidatos..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
               className="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
             />
           </div>
-          <button className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center">
-            <Filter size={16} className="mr-2" /> Filtros
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              className="bg-white border border-slate-200 px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors flex items-center"
+            >
+              <Filter size={16} className="mr-2" /> {selectedFilter}
+            </button>
+            {showFilterDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1">
+                {['Todos', 'Alto Match (>80%)', 'Medio Match (70-80%)', 'Bajo Match (<70%)'].map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => {
+                      setSelectedFilter(option);
+                      setShowFilterDropdown(false);
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -54,7 +96,7 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {candidates.map((c) => {
+              {filteredCandidates.map((c) => {
                 const tableScore = getDisplayScore(c);
                 return (
                   <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
