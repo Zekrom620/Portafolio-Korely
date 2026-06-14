@@ -1,7 +1,7 @@
 import os
 import jwt
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
+import bcrypt
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -13,16 +13,19 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secreto_de_respaldo")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 # El token caducará en 1 hora
 
-# 2. Configuración de Encriptación de Contraseñas (Bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+# 2. Configuración de Encriptación de Contraseñas (Bcrypt Nativo)
 def verificar_password(plain_password: str, hashed_password: str) -> bool:
-    """Compara la contraseña en texto plano con el hash de la BD"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Compara la contraseña en texto plano con el hash de la BD utilizando bcrypt nativo"""
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 def obtener_password_hash(password: str) -> str:
-    """Transforma una contraseña plana en un hash indescifrable"""
-    return pwd_context.hash(password)
+    """Transforma una contraseña plana en un hash indescifrable utilizando bcrypt nativo"""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def crear_token_acceso(data: dict) -> str:
     """Toma los datos del usuario y genera un JWT firmado"""

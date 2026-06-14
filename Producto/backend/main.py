@@ -20,6 +20,28 @@ import pdf_handler
 # 1. Crear tablas automáticamente si no existen
 models.Base.metadata.create_all(bind=engine)
 
+# Inicializar roles básicos si la tabla está vacía
+def inicializar_roles():
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        if db.query(models.Rol).count() == 0:
+            roles = [
+                models.Rol(id_rol=1, nombre_rol="Admin"),
+                models.Rol(id_rol=2, nombre_rol="Gerente Cipress"),
+                models.Rol(id_rol=3, nombre_rol="Postulante")
+            ]
+            db.add_all(roles)
+            db.commit()
+            print("INFO: Roles iniciales creados exitosamente.")
+    except Exception as e:
+        print(f"ERROR: No se pudieron inicializar los roles: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+inicializar_roles()
+
 # 2. Inicializamos la aplicación
 app = FastAPI(
     title="API de Korely",
@@ -389,14 +411,9 @@ def obtener_todos_los_candidatos(id_vacante: Optional[int] = None, db: Session =
             if c.cv_estructurado and isinstance(c.cv_estructurado, dict) and "fortalezas" in c.cv_estructurado:
                 score_ia = c.cv_estructurado.get("score_ia")
             else:
-                # Si no lo tiene, calculamos dinámicamente con Gemini
-                vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
-                if vacante:
-                    try:
-                        cv_est = analizar_y_guardar_compatibilidad(c, vacante, db)
-                        score_ia = cv_est.get("score_ia")
-                    except Exception as e:
-                        print(f"Error calculando compatibilidad perezosa: {e}")
+                # Evitamos llamadas síncronas masivas a Gemini en el listado para prevenir timeouts.
+                # Se calculará mediante pgvector o el fallback por defecto si no ha sido postulado.
+                pass
             
             # Fallback a pgvector si Gemini falla o da null
             if score_ia is None and c.cv_vector is not None:

@@ -260,7 +260,8 @@ export const apiService = {
         }
       }
 
-      const id = c.id_candidato?.toString() || c.id?.toString() || '';
+      const rawId = c.id_candidato?.toString() || c.id?.toString() || '';
+      const id = rawId.includes('-') ? rawId : `${rawId}-${c.id_vacante || 1}`;
       const nombre_completo = c.nombre_completo || c.name || 'Candidato sin nombre';
 
       let status: 'Postulado' | 'Entrevistado' | 'Seleccionado' = 'Postulado';
@@ -299,7 +300,8 @@ export const apiService = {
   },
 
   async updateCandidate(id: string, candidate: Partial<Candidate>): Promise<Candidate> {
-    return handleFetch(`${API_URL}/candidatos/${id}`, {
+    const realId = id.includes('-') ? id.split('-')[0] : id;
+    return handleFetch(`${API_URL}/candidatos/${realId}`, {
       method: 'PUT',
       body: JSON.stringify({
         nombre_completo: candidate.nombre_completo,
@@ -310,8 +312,10 @@ export const apiService = {
     });
   },
 
-  deleteCandidate: (id: string): Promise<void> => 
-    handleFetch(`${API_URL}/candidatos/${id}`, { method: 'DELETE' }),
+  deleteCandidate: (id: string): Promise<void> => {
+    const realId = id.includes('-') ? id.split('-')[0] : id;
+    return handleFetch(`${API_URL}/candidatos/${realId}`, { method: 'DELETE' });
+  },
 
   createPostulacion: async (idVacante: number): Promise<any> => {
     const res = await handleFetch(`${API_URL}/postulaciones`, {
@@ -363,7 +367,8 @@ export const apiService = {
   },
 
   shareFicha: async (candidateId: string, email: string, pdfBase64: string, candidateName: string): Promise<any> => {
-    return handleFetch(`${API_URL}/candidatos/${candidateId}/compartir-ficha`, {
+    const realId = candidateId.includes('-') ? candidateId.split('-')[0] : candidateId;
+    return handleFetch(`${API_URL}/candidatos/${realId}/compartir-ficha`, {
       method: 'POST',
       body: JSON.stringify({
         email: email,
@@ -374,10 +379,11 @@ export const apiService = {
   },
 
   evaluarEntrevista: async (candidateId: string, vacancyId: string, messages: any[]): Promise<any> => {
+    const realId = candidateId.includes('-') ? candidateId.split('-')[0] : candidateId;
     return handleFetch(`${API_URL}/entrevistas/evaluar`, {
       method: 'POST',
       body: JSON.stringify({
-        id_candidato: parseInt(candidateId),
+        id_candidato: parseInt(realId),
         id_vacante: parseInt(vacancyId),
         mensajes: messages.map(m => ({
           role: m.role,

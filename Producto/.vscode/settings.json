@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "C:/Users/vifar/OneDrive/Documentos/GitHub/Portafolio-Korely/Producto/backend/venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "C:/Users/vifar/OneDrive/Documentos/GitHub/Portafolio-Korely/Producto/backend/venv/Lib/site-packages"
+  ],
+  "python.autoComplete.extraPaths": [
+    "C:/Users/vifar/OneDrive/Documentos/GitHub/Portafolio-Korely/Producto/backend/venv/Lib/site-packages"
+  ]
+}
