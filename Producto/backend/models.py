@@ -55,3 +55,14 @@ class Postulacion(Base):
     id_vacante = Column(Integer, ForeignKey("vacantes.id_vacante"))
     estado = Column(String(50), default="Postulado") # Puede ser: Postulado, En Revisión, Entrevistado...
     fecha_postulacion = Column(TIMESTAMP, server_default=func.now())
+
+class Entrevista(Base):
+    __tablename__ = "entrevistas"
+    
+    id_entrevista = Column(Integer, primary_key=True, index=True)
+    id_candidato = Column(Integer, ForeignKey("candidatos.id_candidato"))
+    id_vacante = Column(Integer, ForeignKey("vacantes.id_vacante"))
+    transcripcion = Column(Text)
+    analisis_sentimiento = Column(JSONB) # Almacenará soft_skills, episodio_diferenciador, resumen_ia
+    score_entrevista = Column(Integer) # Calificación de 0 a 100
+    fecha_entrevista = Column(TIMESTAMP, server_default=func.now())

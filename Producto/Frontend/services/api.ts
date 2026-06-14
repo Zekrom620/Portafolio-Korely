@@ -305,6 +305,7 @@ export const apiService = {
         nombre_completo: candidate.nombre_completo,
         telefono: candidate.telefono,
         estado: candidate.status,
+        id_vacante: candidate.id_vacante,
       }),
     });
   },
@@ -359,5 +360,30 @@ export const apiService = {
       body: JSON.stringify({ mensaje: message }),
     });
     return res.respuesta;
+  },
+
+  shareFicha: async (candidateId: string, email: string, pdfBase64: string, candidateName: string): Promise<any> => {
+    return handleFetch(`${API_URL}/candidatos/${candidateId}/compartir-ficha`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: email,
+        nombre_candidato: candidateName,
+        pdf_base64: pdfBase64
+      }),
+    });
+  },
+
+  evaluarEntrevista: async (candidateId: string, vacancyId: string, messages: any[]): Promise<any> => {
+    return handleFetch(`${API_URL}/entrevistas/evaluar`, {
+      method: 'POST',
+      body: JSON.stringify({
+        id_candidato: parseInt(candidateId),
+        id_vacante: parseInt(vacancyId),
+        mensajes: messages.map(m => ({
+          role: m.role,
+          content: m.content
+        }))
+      }),
+    });
   }
 };

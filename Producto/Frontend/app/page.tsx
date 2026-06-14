@@ -130,7 +130,11 @@ export default function App() {
 
   const handleMoveCandidate = async (id: string, nextStatus: CandidateStatus) => {
     try {
-      await apiService.updateCandidate(id, { status: nextStatus });
+      const candidate = candidates.find(c => c.id === id);
+      await apiService.updateCandidate(id, { 
+        status: nextStatus,
+        id_vacante: candidate?.id_vacante
+      });
       setCandidates(candidates.map(c => 
         c.id === id ? { ...c, status: nextStatus } : c
       ));

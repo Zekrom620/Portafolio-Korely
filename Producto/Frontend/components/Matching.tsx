@@ -1,9 +1,11 @@
 "use client";
 import React, { useState } from 'react';
-import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2 } from 'lucide-react';
+import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2, Download, Mail, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Candidate, Vacancy } from '../types';
 import { cn } from '../lib/utils';
+import { apiService } from '../services/api';
+import { jsPDF } from 'jspdf';
 
 interface MatchingProps {
   candidates: Candidate[];
@@ -16,6 +18,165 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('Todos');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  const candidateVacancy = (candidato: Candidate) => {
+    if (candidato.id_vacante) {
+      return vacancies.find(v => v.id == candidato.id_vacante?.toString())?.title || 'Vacante #' + candidato.id_vacante;
+    }
+    return 'No postulado';
+  };
+
+  const generatePDF = (candidato: Candidate, save: boolean = true): jsPDF => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const score = getDisplayScore(candidato);
+
+    // 1. Cabecera Corporativa (Azul Oscuro / Cipress theme)
+    doc.setFillColor(30, 58, 95); // #1e3a5f
+    doc.rect(0, 0, 210, 45, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.text("KORELY AI", 15, 20);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("HEADHUNTER AUTÓNOMO | FICHA TÉCNICA COMPARADA", 15, 27);
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 15, 34);
+
+    // 2. Bloque de Ajuste / Score IA (caja a la derecha en la cabecera)
+    doc.setFillColor(255, 255, 255, 0.15); // Blanco semi-transparente
+    doc.roundedRect(140, 10, 55, 25, 4, 4, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("SCORE DE AFINIDAD", 145, 18);
+    doc.setFontSize(20);
+    doc.text(`${score}%`, 145, 28);
+
+    // 3. Datos Generales del Postulante
+    let y = 60;
+    doc.setTextColor(33, 41, 89);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(candidato.nombre_completo, 15, y);
+
+    y += 6;
+    doc.setTextColor(100, 116, 139);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Contacto: ${candidato.telefono || "No especificado"} | Correo: ${candidato.email || "No especificado"}`, 15, y);
+    
+    // Cargo de la vacante
+    y += 6;
+    const vacancyTitle = candidateVacancy(candidato);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Vacante: ${vacancyTitle}`, 15, y);
+
+    // Separador
+    y += 10;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(15, y, 195, y);
+
+    // 4. Habilidades Técnicas
+    y += 12;
+    doc.setTextColor(30, 58, 95);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("HABILIDADES TÉCNICAS DETECTADAS", 15, y);
+
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    const skills = candidato.analisis_ia?.habilidades_tecnicas?.join(', ') || 'Sin habilidades analizadas.';
+    const splitSkills = doc.splitTextToSize(skills, 180);
+    doc.text(splitSkills, 15, y);
+    y += (splitSkills.length * 5);
+
+    // 5. Fortalezas (Match)
+    y += 10;
+    doc.setTextColor(16, 185, 129); // emerald-500
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("FORTALEZAS DE COMPATIBILIDAD (MATCH)", 15, y);
+
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    
+    const fortalezas: string[] = candidato.analisis_ia?.fortalezas || candidato.analisis_ia?.expertiz_previas || candidato.analisis_ia?.puntos_fuertes || ["No hay fortalezas registradas."];
+    fortalezas.forEach((f) => {
+      const splitF = doc.splitTextToSize(`• ${f}`, 180);
+      doc.text(splitF, 15, y);
+      y += (splitF.length * 5) + 2;
+    });
+
+    // 6. Brechas
+    y += 8;
+    doc.setTextColor(217, 119, 6); // amber-600
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("BRECHAS Y ASPECTOS A MEJORAR", 15, y);
+
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
+    
+    const brechas: string[] = candidato.analisis_ia?.brechas || candidato.analisis_ia?.aspectos_a_mejorar || ["Sin brechas críticas identificadas."];
+    brechas.forEach((b) => {
+      const splitB = doc.splitTextToSize(`• ${b}`, 180);
+      doc.text(splitB, 15, y);
+      y += (splitB.length * 5) + 2;
+    });
+
+    // Pie de página (Footer)
+    doc.setDrawColor(226, 232, 240);
+    doc.line(15, 275, 195, 275);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Documento oficial generado de forma autónoma por Korely AI.", 15, 281);
+    doc.text("Procesamiento de Lenguaje Natural (Gemini 3.5 Flash / pgvector).", 15, 285);
+
+    if (save) {
+      doc.save(`Ficha_Korely_${candidato.nombre_completo.replace(/\s+/g, '_')}.pdf`);
+    }
+
+    return doc;
+  };
+
+  const handleSendEmail = async (candidato: Candidate) => {
+    const targetEmail = prompt("Ingresa el correo electrónico del gerente o reclutador destino:", "gerente@cipress.cl");
+    if (!targetEmail || !targetEmail.trim()) return;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(targetEmail.trim())) {
+      alert("Por favor, ingresa un correo electrónico válido.");
+      return;
+    }
+
+    setSharing(true);
+    try {
+      const doc = generatePDF(candidato, false);
+      const pdfBase64 = doc.output('datauristring');
+
+      await apiService.shareFicha(candidato.id, targetEmail.trim(), pdfBase64, candidato.nombre_completo);
+      alert(`¡Ficha técnica enviada con éxito a ${targetEmail}! Puedes verificar los detalles en la carpeta 'mock_emails' del backend.`);
+    } catch (error) {
+      console.error(error);
+      alert("Ocurrió un error al enviar el correo. Verifique que el backend esté operativo.");
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const getDisplayScore = (candidate: Candidate) => {
     if (candidate.score_ia !== undefined && candidate.score_ia !== null) return candidate.score_ia;
@@ -262,9 +423,33 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3 mt-8">
+                <button 
+                  onClick={() => generatePDF(selectedCandidate)}
+                  className="flex items-center justify-center bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-900/10 active:scale-95 text-xs"
+                >
+                  <Download size={14} className="mr-1.5" /> Descargar PDF
+                </button>
+                <button 
+                  onClick={() => handleSendEmail(selectedCandidate)}
+                  disabled={sharing}
+                  className="flex items-center justify-center bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 disabled:bg-indigo-400 transition-all shadow-md shadow-indigo-900/10 active:scale-95 text-xs"
+                >
+                  {sharing ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin mr-1.5" /> Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Mail size={14} className="mr-1.5" /> Compartir Ficha
+                    </>
+                  )}
+                </button>
+              </div>
+
               <button 
                 onClick={() => setSelectedCandidate(null)}
-                className="mt-8 w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 active:scale-95"
+                className="mt-3 w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all active:scale-95 text-xs"
               >
                 Cerrar Análisis
               </button>

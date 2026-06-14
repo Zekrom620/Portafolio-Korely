@@ -5,6 +5,9 @@ from typing import List, Optional, Any
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import security
+import os
+import base64
+import time
 
 
 # Importamos configuración, motor y modelos
@@ -87,6 +90,7 @@ class CandidatoUpdate(BaseModel):
     nombre_completo: Optional[str] = None
     telefono: Optional[str] = None
     estado: Optional[str] = None
+    id_vacante: Optional[int] = None
 
 # --- ESQUEMAS DE LOGIN ---
 class LoginRequest(BaseModel):
@@ -102,6 +106,11 @@ class RegistroRequest(BaseModel):
 # --- ESQUEMA DE POSTULACION ---
 class PostulacionCreate(BaseModel):
     id_vacante: int
+
+class FichaShareRequest(BaseModel):
+    email: str
+    nombre_candidato: str
+    pdf_base64: Optional[str] = None
 
 # --- 4. RUTAS (Endpoints) ---
 @app.get("/")
@@ -340,24 +349,40 @@ def analizar_y_guardar_compatibilidad(candidato: models.Candidato, vacante: mode
         return candidato.cv_estructurado or {}
 
 
+def calcular_match_consolidado(score_cv: Optional[int], score_entrevista: Optional[int]) -> Optional[int]:
+    """
+    Calcula el score consolidado ponderando 60% el CV y 40% la entrevista con la IA.
+    Si no hay entrevista aún, retorna el score de afinidad del CV.
+    """
+    if score_cv is None:
+        return score_entrevista
+    if score_entrevista is None:
+        return score_cv
+    return int((score_cv * 0.6) + (score_entrevista * 0.4))
+
+
 @app.get("/candidatos", response_model=List[CandidatoResponse])
-def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
+def obtener_todos_los_candidatos(id_vacante: Optional[int] = None, db: Session = Depends(get_db)):
     """
     Obtiene la lista completa de todos los candidatos registrados en la base de datos,
     enriquecidos con los datos de su postulación activa y cálculo de similitud de Gemini / pgvector.
+    Usamos outerjoin para evitar N+1 queries.
     """
-    candidatos = db.query(models.Candidato).all()
+    query = db.query(models.Candidato, models.Postulacion).outerjoin(
+        models.Postulacion, models.Candidato.id_candidato == models.Postulacion.id_candidato
+    )
+    if id_vacante is not None:
+        query = query.filter(models.Postulacion.id_vacante == id_vacante)
+    results = query.all()
     candidatos_enriquecidos = []
     
-    for c in candidatos:
-        postulacion = db.query(models.Postulacion).filter(models.Postulacion.id_candidato == c.id_candidato).first()
-        
-        id_vacante = None
+    for c, postulacion in results:
+        id_vac = None
         estado = None
         score_ia = None
         
         if postulacion:
-            id_vacante = postulacion.id_vacante
+            id_vac = postulacion.id_vacante
             estado = postulacion.estado
             
             # Priorizamos el análisis estructurado de Gemini si tiene fortalezas (lo que indica que se corrió el matching)
@@ -365,7 +390,7 @@ def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
                 score_ia = c.cv_estructurado.get("score_ia")
             else:
                 # Si no lo tiene, calculamos dinámicamente con Gemini
-                vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
+                vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
                 if vacante:
                     try:
                         cv_est = analizar_y_guardar_compatibilidad(c, vacante, db)
@@ -375,7 +400,7 @@ def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
             
             # Fallback a pgvector si Gemini falla o da null
             if score_ia is None and c.cv_vector is not None:
-                vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
+                vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
                 if vacante and vacante.perfil_ideal_vector is not None:
                     try:
                         distancia_coseno = db.execute(
@@ -395,6 +420,15 @@ def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
                     score_ia = c.cv_estructurado.get("score_ia") or c.cv_estructurado.get("score")
                 if score_ia is None:
                     score_ia = 75 + (c.id_candidato % 15)
+            
+            # Consolidar score de Match Predictivo (CV + Entrevista IA)
+            if id_vac is not None:
+                entrevista_db = db.query(models.Entrevista).filter(
+                    models.Entrevista.id_candidato == c.id_candidato,
+                    models.Entrevista.id_vacante == id_vac
+                ).order_by(models.Entrevista.id_entrevista.desc()).first()
+                score_entrevista = entrevista_db.score_entrevista if entrevista_db else None
+                score_ia = calcular_match_consolidado(score_ia, score_entrevista)
         
         candidatos_enriquecidos.append(
             CandidatoResponse(
@@ -404,7 +438,7 @@ def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
                 telefono=c.telefono,
                 cv_texto=c.cv_texto,
                 cv_estructurado=c.cv_estructurado,
-                id_vacante=id_vacante,
+                id_vacante=id_vac,
                 estado=estado,
                 score_ia=score_ia
             )
@@ -413,42 +447,51 @@ def obtener_todos_los_candidatos(db: Session = Depends(get_db)):
     return candidatos_enriquecidos
 
 @app.get("/candidatos/{id_candidato}", response_model=CandidatoResponse)
-def obtener_candidato_por_id(id_candidato: int, db: Session = Depends(get_db)):
+def obtener_candidato_por_id(id_candidato: int, id_vacante: Optional[int] = None, db: Session = Depends(get_db)):
     """
     Obtiene los detalles de un candidato específico por su ID.
     Enriquecido con datos de su postulación.
+    Usamos outerjoin para recuperar los datos correspondientes.
     """
-    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
-    if not candidato:
+    query = db.query(models.Candidato, models.Postulacion).outerjoin(
+        models.Postulacion, models.Candidato.id_candidato == models.Postulacion.id_candidato
+    ).filter(models.Candidato.id_candidato == id_candidato)
+    
+    if id_vacante is not None:
+        query = query.filter(models.Postulacion.id_vacante == id_vacante)
+        
+    result = query.first()
+    
+    if not result:
         raise HTTPException(status_code=404, detail="Candidato no encontrado")
         
-    postulacion = db.query(models.Postulacion).filter(models.Postulacion.id_candidato == id_candidato).first()
-    id_vacante = None
+    c, postulacion = result
+    id_vac = None
     estado = None
     score_ia = None
     
     if postulacion:
-        id_vacante = postulacion.id_vacante
+        id_vac = postulacion.id_vacante
         estado = postulacion.estado
         
-        if candidato.cv_estructurado and isinstance(candidato.cv_estructurado, dict) and "fortalezas" in candidato.cv_estructurado:
-            score_ia = candidato.cv_estructurado.get("score_ia")
+        if c.cv_estructurado and isinstance(c.cv_estructurado, dict) and "fortalezas" in c.cv_estructurado:
+            score_ia = c.cv_estructurado.get("score_ia")
         else:
-            vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
+            vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
             if vacante:
                 try:
-                    cv_est = analizar_y_guardar_compatibilidad(candidato, vacante, db)
+                    cv_est = analizar_y_guardar_compatibilidad(c, vacante, db)
                     score_ia = cv_est.get("score_ia")
                 except Exception as e:
                     print(f"Error calculando compatibilidad perezosa: {e}")
                     
-        if score_ia is None and candidato.cv_vector is not None:
-            vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
+        if score_ia is None and c.cv_vector is not None:
+            vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
             if vacante and vacante.perfil_ideal_vector is not None:
                 try:
                     distancia_coseno = db.execute(
                         text("SELECT cv_vector <=> :perfil_vector FROM candidatos WHERE id_candidato = :id_cand"),
-                        {"perfil_vector": vacante.perfil_ideal_vector, "id_cand": candidato.id_candidato}
+                        {"perfil_vector": vacante.perfil_ideal_vector, "id_cand": c.id_candidato}
                     ).scalar()
                     if distancia_coseno is not None:
                         similitud = 1.0 - float(distancia_coseno)
@@ -457,19 +500,28 @@ def obtener_candidato_por_id(id_candidato: int, db: Session = Depends(get_db)):
                     print(f"Error calculating similarity: {e}")
                     
         if score_ia is None:
-            if candidato.cv_estructurado and isinstance(candidato.cv_estructurado, dict):
-                score_ia = candidato.cv_estructurado.get("score_ia") or candidato.cv_estructurado.get("score")
+            if c.cv_estructurado and isinstance(c.cv_estructurado, dict):
+                score_ia = c.cv_estructurado.get("score_ia") or c.cv_estructurado.get("score")
             if score_ia is None:
-                score_ia = 75 + (candidato.id_candidato % 15)
+                score_ia = 75 + (c.id_candidato % 15)
+
+        # Consolidar score de Match Predictivo (CV + Entrevista IA)
+        if id_vac is not None:
+            entrevista_db = db.query(models.Entrevista).filter(
+                models.Entrevista.id_candidato == c.id_candidato,
+                models.Entrevista.id_vacante == id_vac
+            ).order_by(models.Entrevista.id_entrevista.desc()).first()
+            score_entrevista = entrevista_db.score_entrevista if entrevista_db else None
+            score_ia = calcular_match_consolidado(score_ia, score_entrevista)
                 
     return CandidatoResponse(
-        id_candidato=candidato.id_candidato,
-        id_usuario=candidato.id_usuario,
-        nombre_completo=candidato.nombre_completo,
-        telefono=candidato.telefono,
-        cv_texto=candidato.cv_texto,
-        cv_estructurado=candidato.cv_estructurado,
-        id_vacante=id_vacante,
+        id_candidato=c.id_candidato,
+        id_usuario=c.id_usuario,
+        nombre_completo=c.nombre_completo,
+        telefono=c.telefono,
+        cv_texto=c.cv_texto,
+        cv_estructurado=c.cv_estructurado,
+        id_vacante=id_vac,
         estado=estado,
         score_ia=score_ia
     )
@@ -502,21 +554,47 @@ async def actualizar_candidato(
             detail="Acceso denegado. No tienes permisos para realizar esta acción."
         )
 
-    # 1. Si es el propietario, puede actualizar nombre y teléfono
+    # Regla: Solo el dueño puede modificar datos personales
+    if not is_owner and (datos.nombre_completo is not None or datos.telefono is not None):
+        raise HTTPException(
+            status_code=403, 
+            detail="Acceso denegado. Solo el propietario del perfil puede modificar sus datos personales."
+        )
+
+    # Regla: Solo los reclutadores pueden modificar el estado o vacante de postulación
+    if not is_recruiter and (datos.estado is not None or datos.id_vacante is not None):
+        raise HTTPException(
+            status_code=403, 
+            detail="Acceso denegado. Solo los gerentes y administradores pueden modificar el estado de la postulación."
+        )
+
+    # 1. Si es el propietario, actualiza nombre y teléfono
     if is_owner:
         if datos.nombre_completo is not None:
             candidato.nombre_completo = datos.nombre_completo
         if datos.telefono is not None:
             candidato.telefono = datos.telefono
 
-    # 2. Actualizamos el estado de la postulación
-    if datos.estado is not None:
-        postulacion = db.query(models.Postulacion).filter(models.Postulacion.id_candidato == id_candidato).first()
-        if postulacion:
-            postulacion.estado = datos.estado
+    # 2. Si es reclutador, actualiza la postulación
+    if is_recruiter:
+        vacante_id = datos.id_vacante
+        if vacante_id is None:
+            # Si no se especifica vacante, buscar la primera postulación existente del candidato
+            postulacion = db.query(models.Postulacion).filter(models.Postulacion.id_candidato == id_candidato).first()
         else:
-            # Buscamos la primera vacante disponible o por defecto vacante 1
-            nueva_post = models.Postulacion(id_candidato=id_candidato, id_vacante=1, estado=datos.estado)
+            postulacion = db.query(models.Postulacion).filter(
+                models.Postulacion.id_candidato == id_candidato,
+                models.Postulacion.id_vacante == vacante_id
+            ).first()
+
+        if postulacion:
+            if datos.estado is not None:
+                postulacion.estado = datos.estado
+        else:
+            # Crear nueva postulación si no existe
+            vac_id = vacante_id if vacante_id is not None else 1
+            est_val = datos.estado if datos.estado is not None else "Postulado"
+            nueva_post = models.Postulacion(id_candidato=id_candidato, id_vacante=vac_id, estado=est_val)
             db.add(nueva_post)
 
     db.commit()
@@ -551,6 +629,141 @@ def eliminar_candidato(
     db.commit()
     
     return {"mensaje": f"Candidato con ID {id_candidato} eliminado exitosamente"}
+
+@app.post("/candidatos/{id_candidato}/compartir-ficha")
+def compartir_ficha_candidato(
+    id_candidato: int,
+    datos: FichaShareRequest,
+    db: Session = Depends(get_db),
+    id_usuario_token: int = Depends(security.obtener_usuario_actual)
+):
+    """
+    Simula el envío por correo de la ficha técnica de un candidato.
+    Guarda un reporte HTML premium y el archivo PDF adjunto en backend/mock_emails/.
+    """
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
+    if not candidato:
+        raise HTTPException(status_code=404, detail="Candidato no encontrado")
+
+    usuario_token = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario_token).first()
+    if not usuario_token or usuario_token.id_rol not in [1, 2]:
+         raise HTTPException(
+             status_code=403, 
+             detail="Acceso denegado. Solo los gerentes y administradores pueden compartir la ficha técnica."
+         )
+
+    directorio_correos = os.path.join(os.path.dirname(__file__), "mock_emails")
+    os.makedirs(directorio_correos, exist_ok=True)
+
+    timestamp = int(time.time())
+    nombre_archivo_base = f"ficha_cand_{id_candidato}_{timestamp}"
+    
+    pdf_adjunto_msg = "No se adjuntó archivo PDF"
+    if datos.pdf_base64:
+        try:
+            base64_data = datos.pdf_base64
+            if "," in base64_data:
+                base64_data = base64_data.split(",")[1]
+            
+            pdf_bytes = base64.b64decode(base64_data)
+            pdf_path = os.path.join(directorio_correos, f"{nombre_archivo_base}.pdf")
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_bytes)
+            pdf_adjunto_msg = f"Archivo PDF guardado con éxito en mock_emails/{nombre_archivo_base}.pdf"
+        except Exception as e:
+            print(f"Error decodificando PDF adjunto: {e}")
+            pdf_adjunto_msg = f"Error al procesar el PDF adjunto: {str(e)}"
+
+    score_ia = 0
+    skills_list = []
+    fortalezas_list = []
+    brechas_list = []
+    
+    if candidato.cv_estructurado and isinstance(candidato.cv_estructurado, dict):
+        score_ia = candidato.cv_estructurado.get("score_ia") or 0
+        skills_list = candidato.cv_estructurado.get("habilidades_tecnicas") or []
+        fortalezas_list = candidato.cv_estructurado.get("fortalezas") or []
+        brechas_list = candidato.cv_estructurado.get("brechas") or []
+
+    skills_html = "".join([f"<span style='background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:4px 8px;border-radius:6px;font-size:12px;margin-right:6px;display:inline-block;margin-bottom:6px;'>{s}</span>" for s in skills_list])
+    fortalezas_html = "".join([f"<li style='margin-bottom:6px;'>{f}</li>" for f in fortalezas_list])
+    brechas_html = "".join([f"<li style='margin-bottom:6px;'>{b}</li>" for b in brechas_list])
+
+    email_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Ficha Técnica Profesional - Korely AI</title>
+    </head>
+    <body style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;background-color:#f1f5f9;margin:0;padding:20px;color:#334155;">
+        <div style="max-width:600px;background:#ffffff;margin:0 auto;border-radius:16px;box-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1);overflow:hidden;border:1px solid #e2e8f0;">
+            <div style="background-color:#1e3a5f;padding:24px;color:#ffffff;text-align:center;">
+                <h2 style="margin:0;font-size:20px;letter-spacing:1px;text-transform:uppercase;">Korely AI | Intelligent Recruitment</h2>
+                <p style="margin:4px 0 0 0;font-size:12px;color:#93c5fd;font-weight:bold;">FICHA TÉCNICA PROFESIONAL COMPARADA</p>
+            </div>
+            <div style="padding:24px;">
+                <p>Estimado/a,</p>
+                <p>Le compartimos el reporte de afinidad y análisis de compatibilidad por IA para el siguiente postulante:</p>
+                
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:20px 0;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <tr>
+                            <td style="font-weight:bold;font-size:14px;color:#64748b;padding-bottom:6px;">Candidato:</td>
+                            <td style="font-weight:bold;font-size:16px;color:#1e293b;padding-bottom:6px;text-align:right;">{candidato.nombre_completo}</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:bold;font-size:14px;color:#64748b;padding-bottom:6px;">Contacto:</td>
+                            <td style="font-size:14px;color:#475569;padding-bottom:6px;text-align:right;">{candidato.telefono or "No especificado"}</td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight:bold;font-size:14px;color:#64748b;">Afinidad IA:</td>
+                            <td style="font-weight:bold;font-size:18px;color:#10b981;text-align:right;">{score_ia}%</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <h3 style="color:#1e3a5f;font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">Habilidades Clave</h3>
+                    <div>{skills_html or "<span style='color:#94a3b8;font-size:12px;font-style:italic;'>Sin análisis de habilidades</span>"}</div>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <h3 style="color:#10b981;font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">Fortalezas (Match)</h3>
+                    <ul style="padding-left:20px;font-size:13px;margin:0;line-height:1.6;">
+                        {fortalezas_html or "<li>Experiencia general acorde al sector de la vacante.</li>"}
+                    </ul>
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <h3 style="color:#d97706;font-size:14px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:10px;">Brechas / Aspectos a Mejorar</h3>
+                    <ul style="padding-left:20px;font-size:13px;margin:0;line-height:1.6;">
+                        {brechas_html or "<li>Se sugiere profundizar en la entrevista sobre competencias específicas.</li>"}
+                    </ul>
+                </div>
+
+                <div style="background-color:#eff6ff;padding:12px;border-radius:8px;border-left:4px solid #3b82f6;font-size:11px;color:#1e40af;margin-top:24px;">
+                    <strong>Nota del sistema:</strong> Este reporte fue generado mediante el modelo Gemini Pro de Korely AI y se adjuntó el documento PDF de la ficha técnica completa ({nombre_archivo_base}.pdf).
+                </div>
+            </div>
+            <div style="background:#f8fafc;padding:16px;text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;">
+                Enviado a: {datos.email} &bull; Generado por Reclutamiento Korely AI
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    html_path = os.path.join(directorio_correos, f"{nombre_archivo_base}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(email_html)
+        
+    return {
+        "status": "ok",
+        "mensaje": f"Ficha técnica compartida exitosamente por correo a {datos.email}",
+        "archivo_html": f"mock_emails/{nombre_archivo_base}.html",
+        "pdf_status": pdf_adjunto_msg
+    }
 
 class AssistantChatRequest(BaseModel):
     mensaje: str
@@ -747,3 +960,83 @@ def postular_a_vacante(
         "vacante": vacante.titulo, 
         "candidato": candidato.nombre_completo
     }
+
+class MensajeEntrevista(BaseModel):
+    role: str
+    content: str
+
+class EntrevistaEvaluarRequest(BaseModel):
+    id_candidato: int
+    id_vacante: int
+    mensajes: List[MensajeEntrevista]
+
+class EntrevistaResponse(BaseModel):
+    id_entrevista: int
+    id_candidato: int
+    id_vacante: int
+    transcripcion: str
+    analisis_sentimiento: Any
+    score_entrevista: int
+
+    class Config:
+        from_attributes = True
+
+@app.post("/entrevistas/evaluar", response_model=EntrevistaResponse)
+def evaluar_y_guardar_entrevista(
+    datos: EntrevistaEvaluarRequest,
+    db: Session = Depends(get_db),
+    id_usuario_token: int = Depends(security.obtener_usuario_actual)
+):
+    """
+    Recibe la conversación de una entrevista, invoca a Gemini para evaluar soft skills,
+    ajuste cultural y episodio relevante, y persiste los resultados en la BD.
+    """
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == datos.id_candidato).first()
+    if not candidato:
+        raise HTTPException(status_code=404, detail="Candidato no encontrado")
+
+    vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == datos.id_vacante).first()
+    if not vacante:
+        raise HTTPException(status_code=404, detail="Vacante no encontrada")
+
+    # Compilar los mensajes en un único bloque de texto
+    transcripcion_lista = []
+    for msg in datos.mensajes:
+        sender = candidato.nombre_completo if msg.role == "user" else "Korely (IA)"
+        transcripcion_lista.append(f"{sender}: {msg.content}")
+    transcripcion_completa = "\n".join(transcripcion_lista)
+
+    # Evaluar con Gemini
+    evaluacion = nlp_engine.evaluar_entrevista(
+        transcripcion=transcripcion_completa,
+        vacante_titulo=vacante.titulo,
+        vacante_desc=vacante.descripcion
+    )
+
+    # Guardar en base de datos
+    nueva_entrevista = models.Entrevista(
+        id_candidato=datos.id_candidato,
+        id_vacante=datos.id_vacante,
+        transcripcion=transcripcion_completa,
+        analisis_sentimiento={
+            "soft_skills": evaluacion.get("soft_skills", []),
+            "episodio_diferenciador": evaluacion.get("episodio_diferenciador", ""),
+            "resumen_ia": evaluacion.get("resumen_ia", "")
+        },
+        score_entrevista=evaluacion.get("score_ajuste", 80)
+    )
+
+    db.add(nueva_entrevista)
+    db.commit()
+    db.refresh(nueva_entrevista)
+
+    # Actualizar estado de postulación del candidato a 'Entrevistado'
+    postulacion = db.query(models.Postulacion).filter(
+        models.Postulacion.id_candidato == datos.id_candidato,
+        models.Postulacion.id_vacante == datos.id_vacante
+    ).first()
+    if postulacion:
+        postulacion.estado = "Entrevistado"
+        db.commit()
+
+    return nueva_entrevista

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Message, Candidate } from '../types';
 import { getGeminiResponse } from '../services/ai';
 import { cn } from '../lib/utils';
+import { apiService } from '../services/api';
 
 interface InterviewProps {
   candidates: Candidate[];
@@ -17,6 +18,8 @@ export function Interview({ candidates }: InterviewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluationResult, setEvaluationResult] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -72,9 +75,33 @@ export function Interview({ candidates }: InterviewProps) {
     setIsLoading(false);
   };
 
-  const finishInterview = () => {
-    setShowResult(true);
+  const finishInterview = async () => {
+    if (!selectedCandidate) return;
+    setIsEvaluating(true);
     setIsInterviewing(false);
+    try {
+      const vacancyId = selectedCandidate.id_vacante?.toString() || "1";
+      const result = await apiService.evaluarEntrevista(selectedCandidate.id, vacancyId, messages);
+      setEvaluationResult(result.analisis_sentimiento ? {
+        score_ajuste: result.score_entrevista,
+        soft_skills: result.analisis_sentimiento.soft_skills || [],
+        episodio_diferenciador: result.analisis_sentimiento.episodio_diferenciador || "",
+        resumen_ia: result.analisis_sentimiento.resumen_ia || ""
+      } : null);
+      setShowResult(true);
+    } catch (error) {
+      console.error("Error evaluating interview:", error);
+      alert("Hubo un error al evaluar la entrevista mediante IA. Se mostrarán datos de muestra.");
+      setEvaluationResult({
+        score_ajuste: 85,
+        soft_skills: ['Resiliencia', 'Comunicación Asertiva', 'Adaptabilidad', 'Pensamiento Analítico'],
+        episodio_diferenciador: "Lideró la cobertura digital durante una contingencia crítica en Cipress, aumentando el tráfico en 40%.",
+        resumen_ia: "El candidato demuestra una sólida base técnica y buena capacidad para articular soluciones basadas en datos."
+      });
+      setShowResult(true);
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const reset = () => {
@@ -82,9 +109,23 @@ export function Interview({ candidates }: InterviewProps) {
     setIsInterviewing(false);
     setShowResult(false);
     setMessages([]);
+    setEvaluationResult(null);
   };
 
+  if (isEvaluating) {
+    return (
+      <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center shadow-xl max-w-md mx-auto flex flex-col items-center justify-center space-y-6">
+        <Loader2 size={40} className="animate-spin text-indigo-600" />
+        <h3 className="text-xl font-bold text-slate-800 font-display">Evaluando Entrevista</h3>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Korely AI está analizando el diálogo de la entrevista para extraer habilidades blandas, identificar episodios relevantes y estimar el ajuste cultural...
+        </p>
+      </div>
+    );
+  }
+
   if (showResult && selectedCandidate) {
+    const score = evaluationResult?.score_ajuste || 80;
     return (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -102,7 +143,7 @@ export function Interview({ candidates }: InterviewProps) {
               <p className="text-blue-600 font-semibold mt-1">{selectedCandidate.nombre_completo}</p>
             </div>
             <div className="bg-blue-50 px-4 py-2 rounded-xl text-blue-700 font-bold text-sm border border-blue-100 shadow-sm">
-              Recomendación: <span className="text-blue-800">Altamente Recomendada</span>
+              Recomendación: <span className="text-blue-800">{score >= 80 ? 'Altamente Recomendada' : score >= 70 ? 'Recomendada' : 'Bajo Revisión'}</span>
             </div>
           </div>
 
@@ -113,11 +154,19 @@ export function Interview({ candidates }: InterviewProps) {
                   <Brain className="mr-2 text-indigo-500" size={18} /> Soft Skills Detectadas
                 </h4>
                 <div className="flex flex-wrap gap-2">
-                  {['Resiliencia', 'Comunicación Asertiva', 'Adaptabilidad', 'Pensamiento Analítico'].map(skill => (
-                    <span key={skill} className="bg-slate-50 text-slate-700 px-4 py-1.5 rounded-full text-xs font-bold border border-slate-200 shadow-sm">
-                      {skill}
-                    </span>
-                  ))}
+                  {evaluationResult?.soft_skills && evaluationResult.soft_skills.length > 0 ? (
+                    evaluationResult.soft_skills.map((skill: string) => (
+                      <span key={skill} className="bg-slate-50 text-slate-700 px-4 py-1.5 rounded-full text-xs font-bold border border-slate-200 shadow-sm">
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    ['Comunicación', 'Adaptabilidad'].map(skill => (
+                      <span key={skill} className="bg-slate-50 text-slate-700 px-4 py-1.5 rounded-full text-xs font-bold border border-slate-200 shadow-sm">
+                        {skill}
+                      </span>
+                    ))
+                  )}
                 </div>
               </div>
               
@@ -126,7 +175,7 @@ export function Interview({ candidates }: InterviewProps) {
                   <Star className="mr-2 text-amber-500" size={18} /> Episodio Diferenciador
                 </h4>
                 <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 italic text-sm text-slate-700 leading-relaxed">
-                  &quot;Lideró la cobertura digital durante una contingencia crítica en Cipress, aumentando el tráfico en 40% mediante estrategias SEO en tiempo real y coordinación de equipo remoto bajo alta presión.&quot;
+                  &quot;{evaluationResult?.episodio_diferenciador || 'No se registraron episodios específicos destacados en las respuestas del candidato.'}&quot;
                 </div>
               </div>
             </div>
@@ -136,15 +185,15 @@ export function Interview({ candidates }: InterviewProps) {
                 <CheckCircle2 className="mr-2 text-emerald-500" size={18} /> Resumen IA
               </h4>
               <p className="text-sm text-slate-600 leading-relaxed mb-4">
-                El candidato demuestra una sólida base técnica alineada a los objetivos de Cipress. Su capacidad para articular soluciones basadas en datos es excepcional.
+                {evaluationResult?.resumen_ia || 'Análisis descriptivo de la entrevista generada por la IA.'}
               </p>
               <div className="space-y-3">
                 <div className="flex justify-between text-xs font-bold text-slate-500 uppercase">
                   <span>Ajuste Cultural</span>
-                  <span>95%</span>
+                  <span>{score}%</span>
                 </div>
                 <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full" style={{ width: '95%' }}></div>
+                  <div className="bg-emerald-500 h-full" style={{ width: `${score}%` }}></div>
                 </div>
               </div>
             </div>
