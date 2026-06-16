@@ -173,7 +173,7 @@ export default function App() {
   };
 
   const userRole = user?.rol || 'Postulante';
-  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
+  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente' || user?.id_rol === 1 || user?.id_rol === 2;
 
   const renderContent = () => {
     switch (activeSection) {
@@ -185,6 +185,7 @@ export default function App() {
             vacancies={vacancies} 
             candidates={candidates}
             isRecruiter={isRecruiter}
+            user={user}
             onAddVacancy={handleAddVacancy} 
             onUpdateVacancy={handleUpdateVacancy}
             onDeleteVacancy={handleDeleteVacancy}
@@ -198,7 +199,7 @@ export default function App() {
       case 'kanban':
         return <Kanban candidates={candidates} vacancies={vacancies} onMoveCandidate={handleMoveCandidate} onDeleteCandidate={handleDeleteCandidate} />;
       case 'interview':
-        return <Interview candidates={candidates} />;
+        return <Interview candidates={candidates} vacancies={vacancies} user={user} />;
       case 'profile':
         return <UserProfile user={user} candidates={candidates} onRefresh={refreshData} />;
       default:

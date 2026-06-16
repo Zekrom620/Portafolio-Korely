@@ -2,19 +2,21 @@
 import React, { useState } from 'react';
 import { Briefcase, MapPin, DollarSign, Plus, Trash2, Edit2, Search } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Vacancy, Candidate } from '../types';
+import { Vacancy, Candidate, User } from '../types';
 
 interface VacanciesProps {
   vacancies: Vacancy[];
   candidates: Candidate[];
   isRecruiter: boolean;
+  user?: User | null;
   onAddVacancy: (v: Vacancy) => void;
   onUpdateVacancy: (id: string, v: Partial<Vacancy>) => void;
   onDeleteVacancy: (id: string) => void;
   onApply?: (id: string) => void;
 }
 
-export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, onUpdateVacancy, onDeleteVacancy, onApply }: VacanciesProps) {
+export function Vacancies({ vacancies, candidates, isRecruiter, user, onAddVacancy, onUpdateVacancy, onDeleteVacancy, onApply }: VacanciesProps) {
+  const myCandidate = !isRecruiter ? candidates.find(c => c.id_usuario === user?.id_usuario) : null;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -285,12 +287,18 @@ export function Vacancies({ vacancies, candidates, isRecruiter, onAddVacancy, on
                     </button>
                   </>
                 ) : (
-                  <button 
-                    onClick={() => onApply?.(v.id)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-900/10 active:scale-95"
-                  >
-                    Postularse
-                  </button>
+                  myCandidate && myCandidate.id_vacante?.toString() === v.id ? (
+                    <span className="bg-emerald-500/10 text-emerald-600 px-4 py-2 rounded-lg text-xs font-bold border border-emerald-500/20">
+                      Postulado
+                    </span>
+                  ) : (
+                    <button 
+                      onClick={() => onApply?.(v.id)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-900/10 active:scale-95"
+                    >
+                      Postularse
+                    </button>
+                  )
                 )}
               </div>
             </div>

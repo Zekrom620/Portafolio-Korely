@@ -420,15 +420,25 @@ def obtener_todos_los_candidatos(id_vacante: Optional[int] = None, db: Session =
                 vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
                 if vacante and vacante.perfil_ideal_vector is not None:
                     try:
+                        perfil_vector = vacante.perfil_ideal_vector
+                        if hasattr(perfil_vector, "tolist"):
+                            perfil_vector = perfil_vector.tolist()
+                        elif not isinstance(perfil_vector, list):
+                            perfil_vector = list(perfil_vector)
+
+                        # Convert vector to string representation to avoid psycopg2 numpy/list adaptation issues
+                        perfil_vector_str = f"[{','.join(map(str, perfil_vector))}]"
+
                         distancia_coseno = db.execute(
-                            text("SELECT cv_vector <=> :perfil_vector FROM candidatos WHERE id_candidato = :id_cand"),
-                            {"perfil_vector": vacante.perfil_ideal_vector, "id_cand": c.id_candidato}
+                            text("SELECT cv_vector <=> CAST(:perfil_vector AS vector) FROM candidatos WHERE id_candidato = :id_cand"),
+                            {"perfil_vector": perfil_vector_str, "id_cand": c.id_candidato}
                         ).scalar()
                         
                         if distancia_coseno is not None:
                             similitud = 1.0 - float(distancia_coseno)
                             score_ia = int(max(0.0, min(1.0, similitud)) * 100)
                     except Exception as e:
+                        db.rollback()
                         print(f"Error calculando similitud vectorial: {e}")
                         
             # Fallback definitivo
@@ -506,14 +516,24 @@ def obtener_candidato_por_id(id_candidato: int, id_vacante: Optional[int] = None
             vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vac).first()
             if vacante and vacante.perfil_ideal_vector is not None:
                 try:
+                    perfil_vector = vacante.perfil_ideal_vector
+                    if hasattr(perfil_vector, "tolist"):
+                        perfil_vector = perfil_vector.tolist()
+                    elif not isinstance(perfil_vector, list):
+                        perfil_vector = list(perfil_vector)
+
+                    # Convert vector to string representation to avoid psycopg2 numpy/list adaptation issues
+                    perfil_vector_str = f"[{','.join(map(str, perfil_vector))}]"
+
                     distancia_coseno = db.execute(
-                        text("SELECT cv_vector <=> :perfil_vector FROM candidatos WHERE id_candidato = :id_cand"),
-                        {"perfil_vector": vacante.perfil_ideal_vector, "id_cand": c.id_candidato}
+                        text("SELECT cv_vector <=> CAST(:perfil_vector AS vector) FROM candidatos WHERE id_candidato = :id_cand"),
+                        {"perfil_vector": perfil_vector_str, "id_cand": c.id_candidato}
                     ).scalar()
                     if distancia_coseno is not None:
                         similitud = 1.0 - float(distancia_coseno)
                         score_ia = int(max(0.0, min(1.0, similitud)) * 100)
                 except Exception as e:
+                    db.rollback()
                     print(f"Error calculating similarity: {e}")
                     
         if score_ia is None:
@@ -826,15 +846,25 @@ def obtener_estadisticas_dashboard(db: Session = Depends(get_db)):
         vac = db.query(models.Vacante).filter(models.Vacante.id_vacante == p.id_vacante).first()
         if cand and vac and cand.cv_vector is not None and vac.perfil_ideal_vector is not None:
             try:
+                perfil_vector = vac.perfil_ideal_vector
+                if hasattr(perfil_vector, "tolist"):
+                    perfil_vector = perfil_vector.tolist()
+                elif not isinstance(perfil_vector, list):
+                    perfil_vector = list(perfil_vector)
+
+                # Convert vector to string representation to avoid psycopg2 numpy/list adaptation issues
+                perfil_vector_str = f"[{','.join(map(str, perfil_vector))}]"
+
                 distancia_coseno = db.execute(
-                    text("SELECT cv_vector <=> :perfil_vector FROM candidatos WHERE id_candidato = :id_cand"),
-                    {"perfil_vector": vac.perfil_ideal_vector, "id_cand": cand.id_candidato}
+                    text("SELECT cv_vector <=> CAST(:perfil_vector AS vector) FROM candidatos WHERE id_candidato = :id_cand"),
+                    {"perfil_vector": perfil_vector_str, "id_cand": cand.id_candidato}
                 ).scalar()
                 if distancia_coseno is not None:
                     similitud = 1.0 - float(distancia_coseno)
                     score = int(max(0.0, min(1.0, similitud)) * 100)
                     scores.append(score)
             except Exception as e:
+                db.rollback()
                 print(f"Error calculating stats score: {e}")
                 
     score_global = int(sum(scores) / len(scores)) if scores else 74
