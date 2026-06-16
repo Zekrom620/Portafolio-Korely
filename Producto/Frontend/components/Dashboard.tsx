@@ -2,21 +2,24 @@
 import React from 'react';
 import { TrendingUp, Users, Calendar, Target, CheckCircle2, FileInput, Bot } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Candidate, User } from '../types';
+import { Candidate, User, Vacancy } from '../types';
 
 interface DashboardProps {
   candidates: Candidate[];
+  vacancies: Vacancy[];
   user: User | null;
   statsData?: any;
 }
 
-export function Dashboard({ candidates, user, statsData }: DashboardProps) {
+export function Dashboard({ candidates, vacancies, user, statsData }: DashboardProps) {
   const userName = user?.nombre || user?.nombre_usuario || user?.name || 'Usuario';
   const userRole = user?.rol || 'Postulante';
   const isRecruiter = userRole === 'Admin' || userRole === 'Gerente';
   
   const myCandidateData = candidates.find(c => c.id_usuario === user?.id_usuario);
   const hasCV = !!myCandidateData;
+  const myPostulations = candidates.filter(c => c.id_usuario === user?.id_usuario && c.id_vacante);
+  const postulationsCount = myPostulations.length;
 
   if (!isRecruiter) {
     return (
@@ -39,7 +42,7 @@ export function Dashboard({ candidates, user, statsData }: DashboardProps) {
               </div>
               <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/10">
                 <p className="text-xs text-blue-200 uppercase font-bold tracking-widest mb-1">Postulaciones</p>
-                <span className="font-bold">0 Activadas</span>
+                <span className="font-bold">{postulationsCount} {postulationsCount === 1 ? 'Activa' : 'Activas'}</span>
               </div>
             </div>
           </div>
@@ -49,9 +52,43 @@ export function Dashboard({ candidates, user, statsData }: DashboardProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-6 flex items-center">
-              <TrendingUp className="mr-2 text-blue-500" size={18} /> Recomendaciones IA
+              <Target className="mr-2 text-blue-500" size={18} /> Mis Postulaciones Activas
             </h4>
-            <p className="text-xs text-slate-500 text-center py-8 italic">Próximamente: Vacantes personalizadas basadas en tu perfil analizado.</p>
+            {myPostulations.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-xs text-slate-500 italic mb-4">No te has postulado a ninguna vacante aún.</p>
+                <p className="text-xs text-slate-400">Ve a la pestaña &quot;Vacantes Disponibles&quot; para buscar y postular a tu primer empleo.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {myPostulations.map((p) => {
+                  const vacancy = vacancies?.find(v => v.id === p.id_vacante?.toString());
+                  const statusColor = 
+                    p.status === 'Seleccionado' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                    p.status === 'Entrevistado' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                    'bg-slate-50 text-slate-600 border-slate-100';
+                  
+                  return (
+                    <div key={p.id} className="flex justify-between items-center p-4 rounded-xl border border-slate-100 hover:bg-slate-50/50 transition-all">
+                      <div className="overflow-hidden mr-2">
+                        <p className="font-bold text-sm text-slate-800 truncate">{vacancy?.title || `Vacante #${p.id_vacante}`}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{vacancy?.area || 'General'} • {vacancy?.mode || 'Remoto'}</p>
+                      </div>
+                      <div className="flex items-center space-x-3 shrink-0">
+                        {p.score_ia !== undefined && p.score_ia !== null && p.score_ia > 0 && (
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-blue-600 block">{p.score_ia}% Match</span>
+                          </div>
+                        )}
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${statusColor}`}>
+                          {p.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h4 className="font-bold text-slate-800 mb-6 flex items-center">

@@ -28,19 +28,20 @@ export function Sidebar({ activeSection, setActiveSection, user, onLogout }: Sid
   const userRole = user?.rol || 'Postulante';
   const isRecruiter = userRole === 'Admin' || userRole === 'Gerente' || user?.id_rol === 1 || user?.id_rol === 2;
 
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'vacancies', label: 'Vacantes', icon: Briefcase },
-    { id: 'ai-assistant', label: 'Korely Assistant', icon: Bot },
-    ...(!isRecruiter ? [
-      { id: 'profile', label: 'Mi Perfil', icon: User },
-      { id: 'interview', label: 'Entrevista IA', icon: Mic }
-    ] : []),
-    ...(isRecruiter ? [
-      { id: 'matching', label: 'Matching & Base', icon: UserCheck },
-      { id: 'kanban', label: 'Pipeline Kanban', icon: Columns },
-    ] : []),
-  ];
+  const menuItems = isRecruiter 
+    ? [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'vacancies', label: 'Vacantes', icon: Briefcase },
+        { id: 'ai-assistant', label: 'Korely Assistant', icon: Bot },
+        { id: 'matching', label: 'Matching & Base', icon: UserCheck },
+        { id: 'kanban', label: 'Pipeline Kanban', icon: Columns },
+      ]
+    : [
+        { id: 'dashboard', label: 'Mi Portal', icon: LayoutDashboard },
+        { id: 'vacancies', label: 'Vacantes Disponibles', icon: Briefcase },
+        { id: 'profile', label: 'Mi Perfil', icon: User },
+        { id: 'interview', label: 'Entrevista IA', icon: Mic },
+      ];
 
   const getInitials = (name: string | undefined | null) => {
     if (!name || typeof name !== 'string') return 'U';

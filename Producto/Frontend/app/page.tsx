@@ -178,7 +178,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <Dashboard candidates={candidates} user={user} statsData={dashboardStats} />;
+        return <Dashboard candidates={candidates} vacancies={vacancies} user={user} statsData={dashboardStats} />;
       case 'vacancies':
         return (
           <Vacancies 
@@ -203,14 +203,14 @@ export default function App() {
       case 'profile':
         return <UserProfile user={user} candidates={candidates} onRefresh={refreshData} />;
       default:
-        return <Dashboard candidates={candidates} user={user} />;
+        return <Dashboard candidates={candidates} vacancies={vacancies} user={user} />;
     }
   };
 
   const getTitle = () => {
     const titles: Record<string, string> = {
-      dashboard: 'Dashboard General',
-      vacancies: 'Gestión de Vacantes',
+      dashboard: isRecruiter ? 'Dashboard General' : 'Portal del Postulante',
+      vacancies: isRecruiter ? 'Gestión de Vacantes' : 'Vacantes Disponibles',
       'ai-assistant': 'Korely AI - Recruiter Assistant',
       matching: 'Matching Predictivo & NLP',
       kanban: 'Pipeline de Candidatos',
