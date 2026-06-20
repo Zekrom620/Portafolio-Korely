@@ -18,6 +18,7 @@ interface VacanciesProps {
 export function Vacancies({ vacancies, candidates, isRecruiter, user, onAddVacancy, onUpdateVacancy, onDeleteVacancy, onApply }: VacanciesProps) {
   const myCandidate = !isRecruiter ? candidates.find(c => c.id_usuario === user?.id_usuario) : null;
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedVacancyId, setExpandedVacancyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
@@ -251,56 +252,96 @@ export function Vacancies({ vacancies, candidates, isRecruiter, user, onAddVacan
               v.area.toLowerCase().includes(searchTerm.toLowerCase())
             )
             .map((v) => (
-            <div key={v.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-all group">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg border border-blue-100">
-                  {v.title.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{v.title}</p>
-                  <div className="flex items-center space-x-3 mt-1">
-                    <span className="text-xs text-slate-500 flex items-center"><Briefcase size={12} className="mr-1" /> {v.area}</span>
-                    <span className="text-xs text-slate-500 flex items-center"><MapPin size={12} className="mr-1" /> {v.mode}</span>
-                    <span className="text-xs text-slate-400">Publicado {v.createdAt && new Date(v.createdAt).getFullYear() > 1970 ? new Date(v.createdAt).toLocaleDateString() : 'Recientemente'}</span>
-                    {isRecruiter && (
-                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                        {candidates.filter(c => c.id_vacante?.toString() === v.id).length} postulantes
-                      </span>
-                    )}
+            <div key={v.id} className="border border-slate-100 rounded-xl hover:bg-slate-50/30 transition-all group p-4 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg border border-blue-100">
+                    {v.title.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">{v.title}</p>
+                    <div className="flex items-center space-x-3 mt-1">
+                      <span className="text-xs text-slate-500 flex items-center"><Briefcase size={12} className="mr-1" /> {v.area}</span>
+                      <span className="text-xs text-slate-500 flex items-center"><MapPin size={12} className="mr-1" /> {v.mode}</span>
+                      <span className="text-xs text-slate-400">Publicado {v.createdAt && new Date(v.createdAt).getFullYear() > 1970 ? new Date(v.createdAt).toLocaleDateString() : 'Recientemente'}</span>
+                      {isRecruiter && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedVacancyId(expandedVacancyId === v.id ? null : v.id);
+                          }}
+                          className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-0.5 rounded-full border border-blue-100 transition-colors cursor-pointer"
+                        >
+                          {candidates.filter(c => c.id_vacante?.toString() === v.id).length} {candidates.filter(c => c.id_vacante?.toString() === v.id).length === 1 ? 'postulante' : 'postulantes'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                {isRecruiter ? (
-                  <>
-                    <button 
-                      onClick={() => handleEdit(v)}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => onDeleteVacancy(v.id)}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </>
-                ) : (
-                  myCandidate && myCandidate.id_vacante?.toString() === v.id ? (
-                    <span className="bg-emerald-500/10 text-emerald-600 px-4 py-2 rounded-lg text-xs font-bold border border-emerald-500/20">
-                      Postulado
-                    </span>
+                <div className="flex items-center space-x-2">
+                  {isRecruiter ? (
+                    <>
+                      <button 
+                        onClick={() => handleEdit(v)}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={() => onDeleteVacancy(v.id)}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </>
                   ) : (
-                    <button 
-                      onClick={() => onApply?.(v.id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-900/10 active:scale-95"
-                    >
-                      Postularse
-                    </button>
-                  )
-                )}
+                    myCandidate && myCandidate.id_vacante?.toString() === v.id ? (
+                      <span className="bg-emerald-500/10 text-emerald-600 px-4 py-2 rounded-lg text-xs font-bold border border-emerald-500/20">
+                        Postulado
+                      </span>
+                    ) : (
+                      <button 
+                        onClick={() => onApply?.(v.id)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all shadow-md shadow-blue-900/10 active:scale-95"
+                      >
+                        Postularse
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
+              {/* Expandable applicant list */}
+              {isRecruiter && expandedVacancyId === v.id && (
+                <div className="mt-4 pt-4 border-t border-slate-100 animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                  <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-3 tracking-wider">Candidatos Postulados ({candidates.filter(c => c.id_vacante?.toString() === v.id).length})</h4>
+                  {candidates.filter(c => c.id_vacante?.toString() === v.id).length === 0 ? (
+                    <p className="text-xs text-slate-500 italic py-2">No hay postulaciones registradas en esta vacante todavía.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {candidates.filter(c => c.id_vacante?.toString() === v.id).map((c) => (
+                        <div key={c.id} className="flex justify-between items-center p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50/80 transition-all">
+                          <div className="flex items-center space-x-3 overflow-hidden">
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 border border-indigo-200">
+                              {(c.nombre_completo || 'U').split(' ').map(n => n[0]).join('')}
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-xs font-bold text-slate-800 truncate">{c.nombre_completo}</p>
+                              <p className="text-[9px] text-slate-400 font-medium">Estado: <span className="font-bold text-indigo-600">{c.status}</span></p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 shrink-0">
+                            {c.score_ia !== undefined && c.score_ia !== null && (
+                              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                {c.score_ia}% Match
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

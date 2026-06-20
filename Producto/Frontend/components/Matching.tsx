@@ -18,6 +18,7 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('Todos');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>('all');
   const [sharing, setSharing] = useState(false);
 
   const candidateVacancy = (candidato: Candidate) => {
@@ -188,6 +189,13 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
   const filteredCandidates = candidates.filter(c => {
     const score = getDisplayScore(c);
     const candidateName = c.nombre_completo || '';
+
+    if (selectedVacancyId !== 'all') {
+      if (c.id_vacante?.toString() !== selectedVacancyId) {
+        return false;
+      }
+    }
+
     const matchesSearch = candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.analisis_ia?.habilidades_tecnicas?.some((s: string) => s.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (c.id_vacante && vacancies.find(v => v.id == c.id_vacante?.toString())?.title.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -215,6 +223,19 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+          </div>
+          <div className="relative">
+            <select
+              value={selectedVacancyId}
+              onChange={e => setSelectedVacancyId(e.target.value)}
+              className="bg-white border border-slate-200 px-4 py-2 pr-8 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+              style={{ backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`, backgroundPosition: 'right 8px center', backgroundSize: '16px', backgroundRepeat: 'no-repeat' }}
+            >
+              <option value="all">Todas las vacantes</option>
+              {vacancies.map(v => (
+                <option key={v.id} value={v.id}>{v.title}</option>
+              ))}
+            </select>
           </div>
           <div className="relative">
             <button 

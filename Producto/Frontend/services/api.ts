@@ -46,7 +46,7 @@ const handleFetch = async (url: string, options?: RequestInit, fallbackKey?: str
         ...getAuthHeaders(),
         ...options?.headers,
       },
-      signal: AbortSignal.timeout(15000), // Aumentado a 15 segundos
+      signal: options?.signal !== undefined ? options.signal : AbortSignal.timeout(15000), // Aumentado a 15 segundos
     });
     
     if (res.status === 401) {
@@ -362,6 +362,7 @@ export const apiService = {
     const res = await handleFetch(`${API_URL}/assistant/chat`, {
       method: 'POST',
       body: JSON.stringify({ mensaje: message }),
+      signal: AbortSignal.timeout(60000), // 60 segundos para chat
     });
     return res.respuesta;
   },

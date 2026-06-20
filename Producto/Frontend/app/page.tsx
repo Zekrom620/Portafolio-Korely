@@ -211,7 +211,7 @@ export default function App() {
     const titles: Record<string, string> = {
       dashboard: isRecruiter ? 'Dashboard General' : 'Portal del Postulante',
       vacancies: isRecruiter ? 'Gestión de Vacantes' : 'Vacantes Disponibles',
-      'ai-assistant': 'Korely AI - Recruiter Assistant',
+      'ai-assistant': isRecruiter ? 'Korely AI - Asistente de Reclutamiento' : 'Korely AI - Coach de Preparación',
       matching: 'Matching Predictivo & NLP',
       kanban: 'Pipeline de Candidatos',
       interview: 'Entrevista Conversacional',

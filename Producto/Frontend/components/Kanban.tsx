@@ -14,6 +14,11 @@ interface KanbanProps {
 
 export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandidate }: KanbanProps) {
   const [draggedOverCol, setDraggedOverCol] = useState<string | null>(null);
+  const [selectedVacancyId, setSelectedVacancyId] = useState<string>('all');
+
+  const filteredCandidates = selectedVacancyId === 'all'
+    ? candidates
+    : candidates.filter(c => c.id_vacante?.toString() === selectedVacancyId);
 
   const columns: { id: CandidateStatus; label: string; color: string }[] = [
     { id: 'Postulado', label: 'Postulado', color: 'bg-slate-100 text-slate-700' },
@@ -35,10 +40,31 @@ export function Kanban({ candidates, vacancies, onMoveCandidate, onDeleteCandida
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden space-y-6">
+      {/* Barra superior de filtrado */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm shrink-0">
+        <div className="flex items-center space-x-2">
+          <span className="text-sm font-bold text-slate-800 font-display">Filtrar Pipeline:</span>
+          <span className="text-xs text-slate-400 font-medium">Visualiza los candidatos de una vacante seleccionada</span>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <select
+            value={selectedVacancyId}
+            onChange={e => setSelectedVacancyId(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 pr-10 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+            style={{ backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`, backgroundPosition: 'right 12px center', backgroundSize: '16px', backgroundRepeat: 'no-repeat' }}
+          >
+            <option value="all">Todas las vacantes</option>
+            {vacancies.map(v => (
+              <option key={v.id} value={v.id}>{v.title}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="flex space-x-6 overflow-x-auto pb-8 h-full scrollbar-hide">
         {columns.map((col) => {
-          const colCandidates = candidates.filter(c => c.status === col.id);
+          const colCandidates = filteredCandidates.filter(c => c.status === col.id);
           return (
             <div 
               key={col.id} 

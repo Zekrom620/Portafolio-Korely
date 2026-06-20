@@ -806,13 +806,27 @@ class AssistantChatRequest(BaseModel):
     mensaje: str
 
 @app.post("/assistant/chat")
-def chat_asistente(datos: AssistantChatRequest):
-    """Procesa mensajes del chat de Korely Assistant del lado del servidor."""
-    system_prompt = """Eres Korely, un experto en reclutamiento para Cipress. 
-    Ayuda al reclutador a definir los requisitos de la vacante. 
-    Haz contrapreguntas inteligentes sobre experiencia, portafolio y modalidad.
-    Mantén un tono profesional, servicial y experto.
-    Usa formato markdown para resaltar puntos clave."""
+def chat_asistente(
+    datos: AssistantChatRequest,
+    db: Session = Depends(get_db),
+    id_usuario_token: int = Depends(security.obtener_usuario_actual)
+):
+    """Procesa mensajes del chat de Korely Assistant según el rol del usuario conectado."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario_token).first()
+    is_recruiter = usuario.id_rol in [1, 2] if usuario else False
+
+    if is_recruiter:
+        system_prompt = """Eres Korely, un experto en reclutamiento para Cipress. 
+        Ayuda al reclutador a definir los requisitos de la vacante. 
+        Haz contrapreguntas inteligentes sobre experiencia, portafolio y modalidad.
+        Mantén un tono profesional, servicial y experto.
+        Usa formato markdown para resaltar puntos clave."""
+    else:
+        system_prompt = """Eres Korely, un Coach de Entrevistas y Mentor de Carrera para Cipress.
+        Tu objetivo es ayudar al candidato/postulante a prepararse para su entrevista virtual y mejorar sus habilidades.
+        Simula preguntas de entrevistas técnicas o blandas relativas a su perfil, dale retroalimentación constructiva sobre cómo mejorar sus respuestas y asesóralo en cómo optimizar su currículum.
+        Mantén un tono empático, motivador y profesional.
+        Usa formato markdown para estructurar tus consejos."""
     
     try:
         import google.generativeai as genai

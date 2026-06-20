@@ -39,6 +39,7 @@ export function Sidebar({ activeSection, setActiveSection, user, onLogout }: Sid
     : [
         { id: 'dashboard', label: 'Mi Portal', icon: LayoutDashboard },
         { id: 'vacancies', label: 'Vacantes Disponibles', icon: Briefcase },
+        { id: 'ai-assistant', label: 'Korely Assistant', icon: Bot },
         { id: 'profile', label: 'Mi Perfil', icon: User },
         { id: 'interview', label: 'Entrevista IA', icon: Mic },
       ];

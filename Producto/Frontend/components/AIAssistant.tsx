@@ -6,14 +6,25 @@ import { Message } from '../types';
 import { apiService } from '../services/api';
 
 export function AIAssistant() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Hola, soy Korely. 👋 Estoy lista para ayudarte a definir la vacante ideal para **Cipress**. ¿Qué tipo de profesional estás buscando hoy?',
-      timestamp: Date.now()
-    }
-  ]);
+  const user = apiService.getCurrentUser();
+  const userRole = user?.rol || 'Postulante';
+  const isRecruiter = userRole === 'Admin' || userRole === 'Gerente' || user?.id_rol === 1 || user?.id_rol === 2;
+
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    setMessages([
+      {
+        id: '1',
+        role: 'assistant',
+        content: isRecruiter
+          ? 'Hola, soy Korely. 👋 Estoy lista para ayudarte a definir la vacante ideal para **Cipress**. ¿Qué tipo de profesional estás buscando hoy?'
+          : 'Hola, soy Korely, tu Coach de Entrevistas y Mentor de Carrera. 👋 Estoy lista para ayudarte a prepararte para tus entrevistas virtuales o darte retroalimentación sobre tu CV. ¿De qué te gustaría conversar hoy?',
+        timestamp: Date.now()
+      }
+    ]);
+  }, [isRecruiter]);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -73,7 +84,9 @@ export function AIAssistant() {
             </div>
             <div>
               <p className="font-bold font-display">Korely AI</p>
-              <p className="text-[10px] text-blue-200 font-medium uppercase tracking-wider">Asistente de Perfilamiento</p>
+              <p className="text-[10px] text-blue-200 font-medium uppercase tracking-wider">
+                {isRecruiter ? 'Asistente de Perfilamiento' : 'Coach de Preparación'}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -156,7 +169,11 @@ export function AIAssistant() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder="Ej: Busco un periodista para redes sociales..." 
+                placeholder={
+                  isRecruiter 
+                    ? "Ej: Busco un periodista para redes sociales..." 
+                    : "Ej: ¿Cómo puedo responder a 'cuéntame sobre ti' o simula una pregunta de entrevista..."
+                } 
                 className="w-full border border-slate-200 rounded-full px-5 py-3 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
               />
               <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" size={16} />
