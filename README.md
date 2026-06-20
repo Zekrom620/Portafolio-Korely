@@ -2,9 +2,6 @@
 
 > Ecosistema tecnológico diseñado para transformar el reclutamiento tradicional técnico en un proceso automatizado, inteligente y libre de sesgos. Proyecto desarrollado en conjunto por **Cipress** y **Triskeledu**.
 
-<div align="center">
-  <img width="1200" height="475" alt="Korely Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
 <br />
 
