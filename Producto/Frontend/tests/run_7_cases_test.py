@@ -261,19 +261,19 @@ def main():
     
     try:
         # Simular envío de respuestas a la entrevista
-        interview_payload = {
-            "id_candidato": candidate_id,
-            "id_vacante": vacancy_id,
-            "mensajes": [
+        interview_data = {
+            "id_candidato": str(candidate_id),
+            "id_vacante": str(vacancy_id),
+            "mensajes_json": json.dumps([
                 {"role": "assistant", "content": "¿Por qué te interesa esta vacante?"},
                 {"role": "user", "content": "Me apasiona el desarrollo de software y resolver problemas de alta complejidad. Tengo experiencia liderando proyectos similares y me adapto muy bien al trabajo en equipo."},
                 {"role": "assistant", "content": "Cuéntame sobre una situación difícil que hayas enfrentado en tu trabajo anterior y cómo la resolviste."},
                 {"role": "user", "content": "Tuvimos una caída crítica del servidor de producción debido a un error de carga. Lideré el equipo de contingencia para restaurar el servicio en menos de 15 minutos, identificamos el cuello de botella e implementamos pruebas de estrés automáticas para evitar que se repitiera."}
-            ]
+            ])
         }
         
         log_info("Enviando transcripción simulada de la entrevista a la IA para su evaluación...")
-        r_eval = requests.post(f"{API_URL}/entrevistas/evaluar", headers=headers_cand, json=interview_payload)
+        r_eval = requests.post(f"{API_URL}/entrevistas/evaluar", headers=headers_cand, data=interview_data)
         
         if r_eval.status_code == 200:
             eval_data = r_eval.json()

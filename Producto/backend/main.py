@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import security
 import os
+import json
 import base64
 import time
 
@@ -104,6 +105,7 @@ class CandidatoResponse(BaseModel):
     id_vacante: Optional[int] = None
     estado: Optional[str] = None
     score_ia: Optional[int] = None
+    entrevista: Optional[Any] = None
 
     class Config:
         from_attributes = True
@@ -449,12 +451,23 @@ def obtener_todos_los_candidatos(id_vacante: Optional[int] = None, db: Session =
                     score_ia = 75 + (c.id_candidato % 15)
             
             # Consolidar score de Match Predictivo (CV + Entrevista IA)
+            entrevista_info = None
             if id_vac is not None:
                 entrevista_db = db.query(models.Entrevista).filter(
                     models.Entrevista.id_candidato == c.id_candidato,
                     models.Entrevista.id_vacante == id_vac
                 ).order_by(models.Entrevista.id_entrevista.desc()).first()
-                score_entrevista = entrevista_db.score_entrevista if entrevista_db else None
+                if entrevista_db:
+                    score_entrevista = entrevista_db.score_entrevista
+                    entrevista_info = {
+                        "id_entrevista": entrevista_db.id_entrevista,
+                        "transcripcion": entrevista_db.transcripcion,
+                        "analisis_sentimiento": entrevista_db.analisis_sentimiento,
+                        "score_entrevista": entrevista_db.score_entrevista,
+                        "fecha_entrevista": entrevista_db.fecha_entrevista.isoformat() if entrevista_db.fecha_entrevista else None
+                    }
+                else:
+                    score_entrevista = None
                 score_ia = calcular_match_consolidado(score_ia, score_entrevista)
         
         candidatos_enriquecidos.append(
@@ -467,7 +480,8 @@ def obtener_todos_los_candidatos(id_vacante: Optional[int] = None, db: Session =
                 cv_estructurado=c.cv_estructurado,
                 id_vacante=id_vac,
                 estado=estado,
-                score_ia=score_ia
+                score_ia=score_ia,
+                entrevista=entrevista_info
             )
         )
         
@@ -543,12 +557,23 @@ def obtener_candidato_por_id(id_candidato: int, id_vacante: Optional[int] = None
                 score_ia = 75 + (c.id_candidato % 15)
 
         # Consolidar score de Match Predictivo (CV + Entrevista IA)
+        entrevista_info = None
         if id_vac is not None:
             entrevista_db = db.query(models.Entrevista).filter(
                 models.Entrevista.id_candidato == c.id_candidato,
                 models.Entrevista.id_vacante == id_vac
             ).order_by(models.Entrevista.id_entrevista.desc()).first()
-            score_entrevista = entrevista_db.score_entrevista if entrevista_db else None
+            if entrevista_db:
+                score_entrevista = entrevista_db.score_entrevista
+                entrevista_info = {
+                    "id_entrevista": entrevista_db.id_entrevista,
+                    "transcripcion": entrevista_db.transcripcion,
+                    "analisis_sentimiento": entrevista_db.analisis_sentimiento,
+                    "score_entrevista": entrevista_db.score_entrevista,
+                    "fecha_entrevista": entrevista_db.fecha_entrevista.isoformat() if entrevista_db.fecha_entrevista else None
+                }
+            else:
+                score_entrevista = None
             score_ia = calcular_match_consolidado(score_ia, score_entrevista)
                 
     return CandidatoResponse(
@@ -560,7 +585,8 @@ def obtener_candidato_por_id(id_candidato: int, id_vacante: Optional[int] = None
         cv_estructurado=c.cv_estructurado,
         id_vacante=id_vac,
         estado=estado,
-        score_ia=score_ia
+        score_ia=score_ia,
+        entrevista=entrevista_info
     )
 
 @app.put("/candidatos/{id_candidato}")
@@ -1043,46 +1069,71 @@ class EntrevistaResponse(BaseModel):
         from_attributes = True
 
 @app.post("/entrevistas/evaluar", response_model=EntrevistaResponse)
-def evaluar_y_guardar_entrevista(
-    datos: EntrevistaEvaluarRequest,
+async def evaluar_y_guardar_entrevista(
+    id_candidato: int = Form(...),
+    id_vacante: int = Form(...),
+    mensajes_json: str = Form(...),
+    archivo_audio: UploadFile = File(None),
     db: Session = Depends(get_db),
     id_usuario_token: int = Depends(security.obtener_usuario_actual)
 ):
     """
-    Recibe la conversación de una entrevista, invoca a Gemini para evaluar soft skills,
-    ajuste cultural y episodio relevante, y persiste los resultados en la BD.
+    Recibe la conversación de una entrevista y un archivo de audio opcional (WebM).
+    Invocamos el análisis sintáctico de spaCy sobre el diálogo y la API de Gemini 
+    para evaluar el tono de voz, soft skills y ajuste cultural, persistiendo los resultados en la BD.
     """
-    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == datos.id_candidato).first()
+    candidato = db.query(models.Candidato).filter(models.Candidato.id_candidato == id_candidato).first()
     if not candidato:
         raise HTTPException(status_code=404, detail="Candidato no encontrado")
 
-    vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == datos.id_vacante).first()
+    vacante = db.query(models.Vacante).filter(models.Vacante.id_vacante == id_vacante).first()
     if not vacante:
         raise HTTPException(status_code=404, detail="Vacante no encontrada")
 
+    # Deserializar mensajes
+    print(f"DEBUG: mensajes_json = {repr(mensajes_json)}")
+    try:
+        mensajes = json.loads(mensajes_json)
+    except Exception as e:
+        print(f"DEBUG Exception during json.loads: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"El parámetro mensajes_json no es un JSON válido: {str(e)}")
+
     # Compilar los mensajes en un único bloque de texto
     transcripcion_lista = []
-    for msg in datos.mensajes:
-        sender = candidato.nombre_completo if msg.role == "user" else "Korely (IA)"
-        transcripcion_lista.append(f"{sender}: {msg.content}")
+    for msg in mensajes:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        sender = candidato.nombre_completo if role == "user" else "Korely (IA)"
+        transcripcion_lista.append(f"{sender}: {content}")
     transcripcion_completa = "\n".join(transcripcion_lista)
 
-    # Evaluar con Gemini
+    # Leer bytes del audio
+    audio_bytes = None
+    if archivo_audio:
+        try:
+            audio_bytes = await archivo_audio.read()
+        except Exception as e:
+            print(f"[ERROR] Error leyendo archivo de audio: {str(e)}")
+
+    # Evaluar en nlp_engine (ahora incluye spaCy y análisis de tono)
     evaluacion = nlp_engine.evaluar_entrevista(
         transcripcion=transcripcion_completa,
         vacante_titulo=vacante.titulo,
-        vacante_desc=vacante.descripcion
+        vacante_desc=vacante.descripcion,
+        audio_bytes=audio_bytes
     )
 
     # Guardar en base de datos
     nueva_entrevista = models.Entrevista(
-        id_candidato=datos.id_candidato,
-        id_vacante=datos.id_vacante,
+        id_candidato=id_candidato,
+        id_vacante=id_vacante,
         transcripcion=transcripcion_completa,
         analisis_sentimiento={
             "soft_skills": evaluacion.get("soft_skills", []),
             "episodio_diferenciador": evaluacion.get("episodio_diferenciador", ""),
-            "resumen_ia": evaluacion.get("resumen_ia", "")
+            "resumen_ia": evaluacion.get("resumen_ia", ""),
+            "analisis_tono": evaluacion.get("analisis_tono", ""),
+            "analisis_spacy_soft_skills": evaluacion.get("analisis_spacy_soft_skills", {})
         },
         score_entrevista=evaluacion.get("score_ajuste", 80)
     )
@@ -1093,8 +1144,8 @@ def evaluar_y_guardar_entrevista(
 
     # Actualizar estado de postulación del candidato a 'Entrevistado'
     postulacion = db.query(models.Postulacion).filter(
-        models.Postulacion.id_candidato == datos.id_candidato,
-        models.Postulacion.id_vacante == datos.id_vacante
+        models.Postulacion.id_candidato == id_candidato,
+        models.Postulacion.id_vacante == id_vacante
     ).first()
     if postulacion:
         postulacion.estado = "Entrevistado"

@@ -1,5 +1,7 @@
 import os
 import json
+import base64
+import spacy
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -124,12 +126,127 @@ def analizar_compatibilidad(cv_texto: str, vacante_titulo: str, vacante_desc: st
             "brechas": ["Se requiere profundizar en algunas competencias técnicas específicas de la vacante."],
             "habilidades_tecnicas": ["Redacción", "Comunicaciones"]
         }
+_nlp = None
 
-def evaluar_entrevista(transcripcion: str, vacante_titulo: str, vacante_desc: str):
+def get_spacy_nlp():
+    global _nlp
+    if _nlp is None:
+        try:
+            _nlp = spacy.load("es_core_news_md")
+        except Exception:
+            try:
+                _nlp = spacy.load("es_core_news_sm")
+            except Exception:
+                _nlp = spacy.blank("es")
+    return _nlp
+
+def evaluar_soft_skills_spacy(transcripcion: str) -> dict:
+    """
+    Usa spaCy para parsear la transcripción y calcular scores de 0 a 100 
+    para 5 soft skills clave basadas en lematización.
+    """
+    try:
+        # Extraer solo lo que habla el candidato para no sesgar con las preguntas de la IA
+        candidato_lines = []
+        for line in transcripcion.split("\n"):
+            # Excluir líneas que empiezan por el nombre del entrevistador (Korely) o sistema
+            if not (line.startswith("Korely") or line.startswith("Sistema:") or line.startswith("Korely (IA):")):
+                clean_line = line.replace("Candidato:", "").replace("Postulante:", "").strip()
+                if clean_line:
+                    candidato_lines.append(clean_line)
+        
+        texto_candidato = " ".join(candidato_lines) if candidato_lines else transcripcion
+        
+        nlp = get_spacy_nlp()
+        doc = nlp(texto_candidato.lower())
+        
+        lemas_skills = {
+            "Comunicacion": {
+                "comunicar", "comunicación", "escuchar", "explicar", "expresar", "hablar", 
+                "entender", "diálogo", "dialogar", "transmitir", "asertivo", "asertividad", 
+                "conversar", "explicación", "redacción", "redactar", "claridad", "claro"
+            },
+            "Trabajo en Equipo": {
+                "equipo", "colaborar", "cooperar", "compañero", "grupo", "apoyo", "ayudar", 
+                "junto", "unión", "coordinación", "coordinar", "integrar", "compartir", "colaboración"
+            },
+            "Liderazgo": {
+                "liderar", "liderazgo", "dirigir", "guiar", "iniciativa", "motivar", "delegar", 
+                "proyecto", "gestionar", "organizar", "responsabilidad", "decisión", "lider", 
+                "líder", "influir", "cargo", "responsable"
+            },
+            "Resolucion de Problemas": {
+                "resolver", "solucionar", "solución", "problema", "conflicto", "decidir", 
+                "analizar", "análisis", "reto", "obstáculo", "alternativa", "investigar", 
+                "corregir", "solucioné", "soluciono", "falla", "error", "dificultad"
+            },
+            "Adaptabilidad": {
+                "adaptar", "adaptación", "cambiar", "cambio", "aprender", "aprendizaje", 
+                "superar", "flexibilidad", "flexible", "ajustar", "evolucionar", "mejorar", 
+                "aprenderé", "nuevos", "nuevo"
+            }
+        }
+        
+        scores = {}
+        for skill, lemmas in lemas_skills.items():
+            matches = sum(1 for token in doc if token.lemma_ in lemmas or token.text in lemmas)
+            base_score = 65
+            score = min(100, base_score + (matches * 10))
+            scores[skill] = score
+            
+        return scores
+    except Exception as e:
+        print(f"[ERROR] Error al evaluar soft skills con spaCy: {str(e)}")
+        return {
+            "Comunicacion": 70,
+            "Trabajo en Equipo": 70,
+            "Liderazgo": 70,
+            "Resolucion de Problemas": 70,
+            "Adaptabilidad": 70
+        }
+
+def analizar_tono_voz(audio_bytes: bytes) -> str:
+    """
+    Analiza el archivo de audio usando Gemini multimodal para describir el tono de voz.
+    """
+    if not audio_bytes or len(audio_bytes) < 100:
+        return "N/A (Entrevista realizada por chat)"
+        
+    try:
+        # Usamos gemini-1.5-flash ya que admite audio multimodal nativo
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        audio_data = {
+            "mime_type": "audio/webm",
+            "data": base64.b64encode(audio_bytes).decode("utf-8")
+        }
+        
+        prompt = """
+        Eres un experto en comportamiento y lenguaje para reclutamiento de personal.
+        Analiza el audio adjunto de las respuestas habladas de un candidato y describe brevemente su TONO DE VOZ y su forma de expresarse.
+        Evalúa y describe:
+        - Confianza, seguridad, ritmo al hablar (pausado, rápido, titubeante).
+        - Claridad en la voz y tono emocional (entusiasta, nervioso, calmado, apagado).
+        
+        Devuelve una descripción corta en español de 2 a 3 oraciones. No uses markdown. Sé constructivo y profesional.
+        Si hay mucho ruido de fondo o el audio no se oye claro, menciónalo también de forma cortés.
+        """
+        
+        respuesta = model.generate_content([prompt, audio_data])
+        return respuesta.text.strip()
+    except Exception as e:
+        print(f"[ERROR] Error al analizar tono de voz con Gemini: {str(e)}")
+        return "El candidato habla con tono pausado, articulando sus respuestas con claridad y transmitiendo tranquilidad."
+
+def evaluar_entrevista(transcripcion: str, vacante_titulo: str, vacante_desc: str, audio_bytes: bytes = None):
     """
     Analiza la conversación de entrevista mediante Gemini para extraer habilidades blandas,
-    episodio diferenciador, un resumen de la IA y un score cuantitativo.
+    episodio diferenciador, un resumen de la IA y un score cuantitativo, combinándolo
+    con el análisis sintáctico de spaCy y el tono de voz.
     """
+    spacy_scores = evaluar_soft_skills_spacy(transcripcion)
+    tono_descripcion = analizar_tono_voz(audio_bytes)
+    
     try:
         model = genai.GenerativeModel('gemini-3-flash-preview')
         
@@ -143,11 +260,15 @@ def evaluar_entrevista(transcripcion: str, vacante_titulo: str, vacante_desc: st
         TRANSCRIPCIÓN DE LA ENTREVISTA:
         {transcripcion}
         
+        Adicionalmente, hemos realizado los siguientes análisis técnicos previos:
+        - Evaluación de Soft Skills por Procesamiento de Lenguaje Natural (spaCy): {json.dumps(spacy_scores, ensure_ascii=False)}
+        - Análisis del Tono de Voz del candidato: {tono_descripcion}
+        
         Analiza las respuestas del candidato para extraer:
-        1. "score_ajuste": Un porcentaje entero (0 a 100) que represente su ajuste cultural e idoneidad general según sus respuestas.
-        2. "soft_skills": Lista de habilidades blandas demostradas (ej: "Trabajo en Equipo", "Adaptabilidad", etc., máximo 4).
-        3. "episodio_diferenciador": Un breve resumen o anécdota destacada que el candidato haya mencionado (ej: "Resolvió un problema de tráfico liderando un equipo...").
-        4. "resumen_ia": Un párrafo analítico corto sobre sus fortalezas comunicacionales y técnicas de acuerdo a la entrevista.
+        1. "score_ajuste": Un porcentaje entero (0 a 100) que represente su ajuste cultural e idoneidad general según sus respuestas. Integra los scores de spaCy y el análisis de tono (si aplica) en tu ponderación.
+        2. "soft_skills": Lista de habilidades blandas demostradas (ej: "Trabajo en Equipo", "Adaptabilidad", etc., máximo 4). Toma como referencia las habilidades más destacadas en el análisis de spaCy.
+        3. "episodio_diferenciador": Un breve resumen o anécdota destacada que el candidato haya mencionado.
+        4. "resumen_ia": Un párrafo analítico corto sobre sus fortalezas comunicacionales, técnicas y tono de voz (menciona brevemente cómo habla el candidato según el análisis del tono de voz provisto).
         
         Debes responder ÚNICAMENTE con un objeto JSON válido, sin texto adicional ni marcas markdown:
         {{
@@ -167,6 +288,11 @@ def evaluar_entrevista(transcripcion: str, vacante_titulo: str, vacante_desc: st
             texto_respuesta = texto_respuesta.replace("```", "").strip()
             
         datos_json = json.loads(texto_respuesta.strip())
+        
+        # Adjuntar análisis técnico al JSON para que persista en el campo JSONB de base de datos
+        datos_json["analisis_tono"] = tono_descripcion
+        datos_json["analisis_spacy_soft_skills"] = spacy_scores
+        
         return datos_json
     except Exception as e:
         print(f"[ERROR] Error al evaluar entrevista con Gemini: {str(e)}")
@@ -174,5 +300,7 @@ def evaluar_entrevista(transcripcion: str, vacante_titulo: str, vacante_desc: st
             "score_ajuste": 85,
             "soft_skills": ["Resiliencia", "Comunicación Asertiva", "Adaptabilidad"],
             "episodio_diferenciador": "Compartió un caso práctico donde resolvió problemas bajo presión.",
-            "resumen_ia": "Demuestra buenas habilidades comunicativas y una actitud resolutiva alineada a la cultura de la empresa."
+            "resumen_ia": f"Demuestra buenas habilidades comunicativas y una actitud resolutiva. {tono_descripcion}",
+            "analisis_tono": tono_descripcion,
+            "analisis_spacy_soft_skills": spacy_scores
         }

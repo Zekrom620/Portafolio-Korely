@@ -32,6 +32,7 @@ export interface Candidate {
   id_vacante?: number;
   status: CandidateStatus;
   match?: number;
+  entrevista?: any;
 }
 
 export interface Vacancy {

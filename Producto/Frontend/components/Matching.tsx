@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2, Download, Mail, Loader2 } from 'lucide-react';
+import { Search, Filter, Eye, Cpu, TrendingUp, TrendingDown, Info, X, Trash2, Download, Mail, Loader2, Mic, Volume2, Brain } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Candidate, Vacancy } from '../types';
 import { cn } from '../lib/utils';
@@ -20,6 +20,7 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedVacancyId, setSelectedVacancyId] = useState<string>('all');
   const [sharing, setSharing] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
 
   const candidateVacancy = (candidato: Candidate) => {
     if (candidato.id_vacante) {
@@ -146,6 +147,109 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
     doc.setTextColor(148, 163, 184);
     doc.text("Documento oficial generado de forma autónoma por Korely AI.", 15, 281);
     doc.text("Procesamiento de Lenguaje Natural (Gemini 3.5 Flash / pgvector).", 15, 285);
+
+    if (candidato.entrevista) {
+      doc.addPage();
+      
+      // Page 2 Header
+      doc.setFillColor(30, 58, 95);
+      doc.rect(0, 0, 210, 25, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("REPORTE DE ENTREVISTA E INTELIGENCIA ARTIFICIAL", 15, 16);
+      
+      let y2 = 40;
+      
+      // 1. Tono de Voz
+      if (candidato.entrevista.analisis_sentimiento?.analisis_tono) {
+        doc.setTextColor(30, 58, 95);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("ANÁLISIS DE TONO DE VOZ (MULTIMODAL)", 15, y2);
+        
+        y2 += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(51, 65, 85);
+        const toneDesc = candidato.entrevista.analisis_sentimiento.analisis_tono;
+        const splitTone = doc.splitTextToSize(toneDesc, 180);
+        doc.text(splitTone, 15, y2);
+        y2 += (splitTone.length * 5) + 8;
+      }
+      
+      // 2. Soft Skills de spaCy
+      if (candidato.entrevista.analisis_sentimiento?.analisis_spacy_soft_skills) {
+        doc.setTextColor(30, 58, 95);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("DESGLOSE DE HABILIDADES BLANDAS (spaCy NLP)", 15, y2);
+        
+        y2 += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(51, 65, 85);
+        
+        const spacySkills = candidato.entrevista.analisis_sentimiento.analisis_spacy_soft_skills;
+        Object.entries(spacySkills).forEach(([skill, val]: [string, any]) => {
+          const label = skill === "Comunicacion" ? "Comunicación" : skill === "Trabajo en Equipo" ? "Trabajo en Equipo" : skill === "Liderazgo" ? "Liderazgo" : skill === "Resolucion de Problemas" ? "Resolución de Problemas" : skill === "Adaptabilidad" ? "Adaptabilidad" : skill;
+          doc.setFont("helvetica", "bold");
+          doc.text(`${label}:`, 15, y2);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${val}%`, 70, y2);
+          
+          // Dibujar barra de progreso en PDF
+          doc.setFillColor(226, 232, 240);
+          doc.rect(85, y2 - 3, 50, 3, 'F');
+          doc.setFillColor(59, 130, 246); // Azul
+          doc.rect(85, y2 - 3, (val / 100) * 50, 3, 'F');
+          
+          y2 += 6;
+        });
+        y2 += 6;
+      }
+      
+      // 3. Resumen y Episodio Diferenciador
+      if (candidato.entrevista.analisis_sentimiento?.resumen_ia) {
+        doc.setTextColor(30, 58, 95);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("RESUMEN DE ENTREVISTA IA", 15, y2);
+        
+        y2 += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(51, 65, 85);
+        const summary = candidato.entrevista.analisis_sentimiento.resumen_ia;
+        const splitSummary = doc.splitTextToSize(summary, 180);
+        doc.text(splitSummary, 15, y2);
+        y2 += (splitSummary.length * 5) + 8;
+      }
+
+      if (candidato.entrevista.analisis_sentimiento?.episodio_diferenciador) {
+        doc.setTextColor(30, 58, 95);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+        doc.text("EPISODIO DIFERENCIADOR DESTACADO", 15, y2);
+        
+        y2 += 6;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(51, 65, 85);
+        const episode = candidato.entrevista.analisis_sentimiento.episodio_diferenciador;
+        const splitEpisode = doc.splitTextToSize(`"${episode}"`, 180);
+        doc.text(splitEpisode, 15, y2);
+        y2 += (splitEpisode.length * 5) + 8;
+      }
+
+      // Pie de página página 2
+      doc.setDrawColor(226, 232, 240);
+      doc.line(15, 275, 195, 275);
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("Reporte de entrevista generado por el motor de análisis de Korely AI.", 15, 281);
+    }
 
     if (save) {
       doc.save(`Ficha_Korely_${candidato.nombre_completo.replace(/\s+/g, '_')}.pdf`);
@@ -369,7 +473,7 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
             >
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
               <button 
-                onClick={() => setSelectedCandidate(null)}
+                onClick={() => { setSelectedCandidate(null); setShowTranscript(false); }}
                 className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-100 rounded-full transition-all"
               >
                 <X size={20} />
@@ -442,6 +546,70 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
                   </div>
                   <p className="text-[10px] text-slate-400 mt-2 italic">Análisis realizado mediante el modelo Gemini Pro de Korely AI.</p>
                 </div>
+
+                {selectedCandidate.entrevista && (
+                  <div className="border-t border-slate-100 pt-6 mt-6 space-y-6">
+                    <h5 className="text-sm font-bold flex items-center text-slate-800 uppercase tracking-wider">
+                      <Mic className="mr-2 text-indigo-600" size={18} /> Análisis de Entrevista
+                    </h5>
+
+                    {/* Tono de voz */}
+                    {selectedCandidate.entrevista.analisis_sentimiento?.analisis_tono && (
+                      <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                        <p className="text-xs font-bold text-indigo-700 uppercase mb-2 flex items-center">
+                          <Volume2 size={14} className="mr-1" /> Análisis del Tono de Voz
+                        </p>
+                        <p className="text-sm text-slate-700 leading-relaxed italic">
+                          &quot;{selectedCandidate.entrevista.analisis_sentimiento.analisis_tono}&quot;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Soft Skills de spaCy */}
+                    {selectedCandidate.entrevista.analisis_sentimiento?.analisis_spacy_soft_skills && (
+                      <div className="p-5 bg-slate-50 border border-slate-100 rounded-2xl space-y-4">
+                        <p className="text-xs font-bold text-slate-700 uppercase flex items-center">
+                          <Brain size={14} className="mr-1 text-slate-500" /> Habilidades Blandas (spaCy NLP)
+                        </p>
+                        <div className="space-y-3">
+                          {Object.entries(selectedCandidate.entrevista.analisis_sentimiento.analisis_spacy_soft_skills).map(([skill, val]: [string, any]) => (
+                            <div key={skill} className="space-y-1">
+                              <div className="flex justify-between text-xs font-semibold text-slate-600">
+                                <span>{skill === "Comunicacion" ? "Comunicación" : skill === "Trabajo en Equipo" ? "Trabajo en Equipo" : skill === "Liderazgo" ? "Liderazgo" : skill === "Resolucion de Problemas" ? "Resolución de Problemas" : skill === "Adaptabilidad" ? "Adaptabilidad" : skill}</span>
+                                <span>{val}%</span>
+                              </div>
+                              <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                <div 
+                                  className={cn(
+                                    "h-full rounded-full transition-all duration-500",
+                                    val >= 80 ? "bg-emerald-500" : val >= 70 ? "bg-amber-500" : "bg-indigo-500"
+                                  )} 
+                                  style={{ width: `${val}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expandable Transcripción */}
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <button
+                        onClick={() => setShowTranscript(!showTranscript)}
+                        className="w-full p-4 bg-slate-50 hover:bg-slate-100 transition-colors flex justify-between items-center text-xs font-bold text-slate-700"
+                      >
+                        <span>TRANSCRIPCIÓN COMPLETA</span>
+                        <span className="text-[10px] text-slate-400 uppercase">{showTranscript ? "Ocultar" : "Mostrar"}</span>
+                      </button>
+                      {showTranscript && (
+                        <div className="p-4 bg-white border-t border-slate-100 text-xs text-slate-600 font-mono whitespace-pre-wrap max-h-[150px] overflow-y-auto">
+                          {selectedCandidate.entrevista.transcripcion}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3 mt-8">
@@ -469,7 +637,7 @@ export function Matching({ candidates, vacancies, onDeleteCandidate }: MatchingP
               </div>
 
               <button 
-                onClick={() => setSelectedCandidate(null)}
+                onClick={() => { setSelectedCandidate(null); setShowTranscript(false); }}
                 className="mt-3 w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all active:scale-95 text-xs"
               >
                 Cerrar Análisis

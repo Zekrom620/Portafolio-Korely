@@ -294,7 +294,8 @@ export const apiService = {
         status,
         analisis_ia: analisis,
         id_vacante: c.id_vacante !== undefined ? c.id_vacante : 1,
-        score_ia
+        score_ia,
+        entrevista: c.entrevista
       };
     });
   },
@@ -379,18 +380,41 @@ export const apiService = {
     });
   },
 
-  evaluarEntrevista: async (candidateId: string, vacancyId: string, messages: any[]): Promise<any> => {
+  evaluarEntrevista: async (candidateId: string, vacancyId: string, messages: any[], audioBlob?: Blob | null): Promise<any> => {
     const realId = candidateId.includes('-') ? candidateId.split('-')[0] : candidateId;
-    return handleFetch(`${API_URL}/entrevistas/evaluar`, {
-      method: 'POST',
-      body: JSON.stringify({
-        id_candidato: parseInt(realId),
-        id_vacante: parseInt(vacancyId),
-        mensajes: messages.map(m => ({
-          role: m.role,
-          content: m.content
-        }))
-      }),
-    });
+    const token = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEYS.TOKEN) : null;
+    
+    const formData = new FormData();
+    formData.append("id_candidato", realId);
+    formData.append("id_vacante", vacancyId);
+    
+    const mappedMessages = messages.map(m => ({
+      role: m.role,
+      content: m.content
+    }));
+    formData.append("mensajes_json", JSON.stringify(mappedMessages));
+    
+    if (audioBlob) {
+      formData.append("archivo_audio", audioBlob, "entrevista_audio.webm");
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/entrevistas/evaluar`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+      
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: 'Error al evaluar la entrevista' }));
+        throw new Error(error.detail || `Error ${res.status}`);
+      }
+      return res.json();
+    } catch (error) {
+      console.error("Error in evaluarEntrevista:", error);
+      throw error;
+    }
   }
 };

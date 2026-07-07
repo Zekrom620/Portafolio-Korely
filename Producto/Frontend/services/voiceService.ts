@@ -4,12 +4,28 @@ export class VoiceService {
   private recognition: any = null;
   private ai: GoogleGenAI | null = null;
 
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private recordedBlobs: Blob[] = [];
+
   private currentTranscript = '';
   private interimTranscript = '';
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private dataArray: Uint8Array | null = null;
   private stream: MediaStream | null = null;
+
+  getCombinedAudioBlob(): Blob | null {
+    if (this.recordedBlobs.length === 0) return null;
+    const type = this.recordedBlobs[0].type;
+    return new Blob(this.recordedBlobs, { type });
+  }
+
+  resetAudioChunks() {
+    this.recordedBlobs = [];
+    this.audioChunks = [];
+    this.mediaRecorder = null;
+  }
 
   init() {
     if (typeof window === 'undefined') return;
@@ -86,6 +102,27 @@ export class VoiceService {
       const constraints = deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true };
       this.stream = await navigator.mediaDevices.getUserMedia(constraints);
       
+      this.audioChunks = [];
+      try {
+        this.mediaRecorder = new MediaRecorder(this.stream, { mimeType: 'audio/webm' });
+      } catch (e) {
+        try {
+          this.mediaRecorder = new MediaRecorder(this.stream);
+        } catch (e2) {
+          console.error("MediaRecorder not supported in this browser:", e2);
+          this.mediaRecorder = null;
+        }
+      }
+
+      if (this.mediaRecorder) {
+        this.mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            this.audioChunks.push(event.data);
+          }
+        };
+        this.mediaRecorder.start();
+      }
+      
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
@@ -159,6 +196,24 @@ export class VoiceService {
         console.error(e);
       }
     }
+    
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      try {
+        const chunks = this.audioChunks;
+        const mime = this.mediaRecorder.mimeType;
+        const recordedList = this.recordedBlobs;
+        this.mediaRecorder.onstop = () => {
+          const finalBlob = new Blob(chunks, { type: mime || 'audio/webm' });
+          if (finalBlob.size > 0) {
+            recordedList.push(finalBlob);
+          }
+        };
+        this.mediaRecorder.stop();
+      } catch (e) {
+        console.error("Error stopping MediaRecorder:", e);
+      }
+    }
+
     const finalTranscript = (this.currentTranscript + this.interimTranscript).trim();
     this.cleanupAudio();
     return finalTranscript;

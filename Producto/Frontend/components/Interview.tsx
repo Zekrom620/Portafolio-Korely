@@ -115,6 +115,7 @@ export function Interview({ candidates, vacancies, user }: InterviewProps) {
     if (!selectedCandidate) return;
     setError(null);
     
+    voiceService.resetAudioChunks();
     const hasPermission = await voiceService.checkPermissions();
     if (!hasPermission) {
       setError("No se pudo acceder al micrófono. Por favor, asegúrate de dar permisos en tu navegador.");
@@ -277,15 +278,28 @@ export function Interview({ candidates, vacancies, user }: InterviewProps) {
     setIsEvaluating(true);
     setIsInterviewing(false);
     
+    let finalMessages = [...messages];
+    
     // Stop recording and speaking if active
     if (isRecording) {
-      voiceService.stopListening();
+      const lastTranscript = voiceService.stopListening();
       setIsRecording(false);
+      if (lastTranscript) {
+        finalMessages.push({
+          id: Date.now().toString(),
+          role: 'user',
+          content: lastTranscript,
+          timestamp: Date.now()
+        });
+      }
+      // Wait for MediaRecorder to finish writing the last chunk
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
     
     try {
+      const audioBlob = voiceService.getCombinedAudioBlob();
       const vacancyId = selectedCandidate.id_vacante?.toString() || "1";
-      const result = await apiService.evaluarEntrevista(selectedCandidate.id, vacancyId, messages);
+      const result = await apiService.evaluarEntrevista(selectedCandidate.id, vacancyId, finalMessages, audioBlob);
       setEvaluationResult(result.analisis_sentimiento ? {
         score_ajuste: result.score_entrevista,
         soft_skills: result.analisis_sentimiento.soft_skills || [],
